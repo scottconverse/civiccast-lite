@@ -1,6 +1,6 @@
 # CivicCast Lab
 
-Private, paused research project preserving the alternative Rust broadcast engine
+Private research project developing the Rust broadcast engine
 originally built as TownLight Station. It is separate from the working
 [CivicCast product](https://github.com/scottconverse/civiccast).
 
@@ -17,6 +17,10 @@ not a released station product.
 The lightweight Python meeting recorder stays in
 [Townlight Station](https://github.com/townlight/station/tree/main/beta-1).
 Its removal from this current tree does not rewrite the original history or tags.
-GitHub Actions are disabled while the project is paused. No Mac port is implemented
-or promised. Existing Windows and Rust identifiers remain unchanged inside the
-preserved implementation.
+Cross-platform work targets Windows, macOS on Apple silicon, and Ubuntu. The
+channel worker builds with Cargo and a native GStreamer 1.28 development
+runtime. On Linux its playout graph requires the Pango text overlay and the Rust
+closed-caption plugin. The ingest loudness analyzer uses the Rust audiofx plugin.
+Windows development uses the safe Cargo wrapper in scripts/. The installed
+station and its 3-, 6-, and 9-channel capacities still need qualification on
+the three reference machines.

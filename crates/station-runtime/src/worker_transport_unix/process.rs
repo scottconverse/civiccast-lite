@@ -21,6 +21,10 @@ impl OwnedGroup {
             // have been reassigned to an unrelated process group.
             if unsafe { libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL) } == -1 {
                 let e = io::Error::last_os_error();
+                #[cfg(target_os = "macos")]
+                if e.raw_os_error() == Some(libc::EPERM) && lone_exited_group_leader(child.id()) {
+                    return Ok(());
+                }
                 if e.raw_os_error() != Some(libc::ESRCH) {
                     return Err(e);
                 }
@@ -59,6 +63,35 @@ impl OwnedGroup {
         self.child = None;
         Ok(Some(code))
     }
+}
+
+// Darwin reports EPERM when the only member of a process group is a zombie.
+// Keep the child unreaped throughout both observations so its ID stays owned.
+#[cfg(target_os = "macos")]
+fn lone_exited_group_leader(pid: u32) -> bool {
+    let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+    let observed = unsafe {
+        libc::waitid(
+            libc::P_PID,
+            pid,
+            &mut info,
+            libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+        )
+    };
+    if observed != 0 || unsafe { info.si_pid() } != pid as libc::pid_t {
+        return false;
+    }
+    const PROC_PGRP_ONLY: u32 = 2; // <sys/proc_info.h>
+    let mut members = [0 as libc::pid_t; 8];
+    let bytes = unsafe {
+        libc::proc_listpids(
+            PROC_PGRP_ONLY,
+            pid,
+            members.as_mut_ptr().cast(),
+            std::mem::size_of_val(&members) as libc::c_int,
+        )
+    };
+    bytes == std::mem::size_of::<libc::pid_t>() as libc::c_int && members[0] == pid as libc::pid_t
 }
 
 impl Drop for OwnedGroup {
