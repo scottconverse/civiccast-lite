@@ -183,6 +183,7 @@ interface ScheduleItem {
   starts_at_unix_ms: number;
   duration_ms: number;
   state: "draft" | "committed" | "cancelled";
+  revision: number;
 }
 
 interface CommitPlan {
@@ -795,6 +796,7 @@ function Schedule({ dashboard, channels }: { dashboard: Dashboard | null; channe
         starts_at_unix_ms: new Date(start).getTime(),
         duration_ms: Math.round(Number(duration) * 1000),
         state: "draft",
+        revision: 1,
       };
       await request<ScheduleItem>("/api/v1/schedule/items", { method: "PUT", body: JSON.stringify(scheduleItem) });
       const nextPlan = await request<CommitPlan>("/api/v1/schedule/prepare", { method: "POST", body: JSON.stringify({ plan_id: `plan-${crypto.randomUUID()}`, schedule_item_id: scheduleItem.item_id }) });
