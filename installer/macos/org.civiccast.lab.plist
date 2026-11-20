@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>org.civiccast.lab</string>
+<key>ProgramArguments</key><array><string>/Library/Application Support/CivicCast Lab/app/bin/start-station</string></array>
+<key>UserName</key><string>_civiccastlab</string>
+<key>GroupName</key><string>_civiccastlab</string>
+<key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
+<key>StandardOutPath</key><string>/Library/Application Support/CivicCast Lab/state/service.log</string>
+<key>StandardErrorPath</key><string>/Library/Application Support/CivicCast Lab/state/service.log</string>
+</dict></plist>

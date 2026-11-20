@@ -1,0 +1,36 @@
+#!/bin/sh
+set -eu
+base="/Library/Application Support/CivicCast Lab"
+account=_civiccastlab
+group=/Groups/$account
+user=/Users/$account
+if ! dscl . -read "$group" >/dev/null 2>&1; then
+    gid=499
+    while dscl . -list /Groups PrimaryGroupID | awk -v id="$gid" '$2==id{found=1}END{exit !found}'; do gid=$((gid-1)); test "$gid" -gt 200; done
+    dscl . -create "$group" PrimaryGroupID "$gid"
+else
+    gid=$(dscl . -read "$group" PrimaryGroupID | awk '{print $2}')
+fi
+if ! dscl . -read "$user" >/dev/null 2>&1; then
+    uid=499
+    while dscl . -list /Users UniqueID | awk -v id="$uid" '$2==id{found=1}END{exit !found}'; do uid=$((uid-1)); test "$uid" -gt 200; done
+    dscl . -create "$user" UniqueID "$uid"
+    dscl . -create "$user" PrimaryGroupID "$gid"
+    dscl . -create "$user" NFSHomeDirectory "$base/state"
+    dscl . -create "$user" UserShell /usr/bin/false
+    dscl . -create "$user" IsHidden 1
+fi
+test "$(id -g "$account")" = "$gid"
+for d in state credentials; do install -d -m 700 -o "$account" -g "$account" "$base/$d"; done
+install -d -m 755 -o "$account" -g "$account" "/Library/WebServer/Documents/civiccast-lab"
+if ! test -e "$base/credentials/station-master.key"; then
+    umask 077
+    key=$(mktemp "$base/credentials/.key.XXXXXXXX")
+    trap 'rm -f "$key"' EXIT
+    dd if=/dev/urandom of="$key" bs=32 count=1 2>/dev/null
+    chown "$account:$account" "$key"
+    ln "$key" "$base/credentials/station-master.key"
+    rm "$key"
+    trap - EXIT
+fi
+launchctl bootstrap system /Library/LaunchDaemons/org.civiccast.lab.plist

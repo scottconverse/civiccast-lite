@@ -756,6 +756,8 @@ pub fn same_on_air_destination(left: &str, right: &str) -> bool {
         u.host_str().is_some_and(|host| {
             host.eq_ignore_ascii_case("a.rtmp.youtube.com")
                 || host.eq_ignore_ascii_case("b.rtmp.youtube.com")
+                || host.eq_ignore_ascii_case("a.rtmps.youtube.com")
+                || host.eq_ignore_ascii_case("b.rtmps.youtube.com")
         })
     };
     if youtube(&left) && youtube(&right) {

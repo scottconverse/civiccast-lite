@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+test "$3" = / || { echo "Install on the running system volume." >&2; exit 1; }
+if launchctl print system/org.civiccast.lab >/dev/null 2>&1; then
+    launchctl bootout system/org.civiccast.lab
+fi

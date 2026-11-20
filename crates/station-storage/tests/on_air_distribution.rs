@@ -25,7 +25,7 @@ fn conflicting_youtube_assignments_are_rejected_and_can_be_reassigned() {
             })
             .unwrap();
     }
-    let primary = "rtmps://a.rtmp.youtube.com/live2/fixture-key";
+    let primary = "rtmps://a.rtmps.youtube.com/live2/fixture-key";
     let backup = "rtmp://b.rtmp.youtube.com/live2/fixture-key?backup=1";
     store.set_on_air_rtmp(ids[0], Some(primary)).unwrap();
     let conflict = store.set_on_air_rtmp(ids[1], Some(backup)).unwrap_err();
