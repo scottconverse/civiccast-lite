@@ -159,6 +159,7 @@ public static class TownLightCargoNativeErrorMode {
 # Windows loader/crash dialog that survives the test command.
 $priorErrorMode = [TownLightCargoNativeErrorMode]::SetErrorMode(0x0001 -bor 0x0002)
 
+$priorTargetRunner = $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER
 $priorPath = $env:PATH
 $priorPluginPath = $env:GST_PLUGIN_PATH_1_0
 $priorPluginSystemPath = $env:GST_PLUGIN_SYSTEM_PATH_1_0
@@ -166,6 +167,12 @@ try {
     $env:PATH = $runtimeBin + ';' + $priorPath
     $env:GST_PLUGIN_PATH_1_0 = $pluginPath
     $env:GST_PLUGIN_SYSTEM_PATH_1_0 = $pluginPath
+
+    # Cargo run launches from the invocation directory. Cargo test runs each
+    # target from its package directory (the runner path in .cargo/config.toml).
+    if ($cargoArguments.Count -gt 0 -and $cargoArguments[0] -in @('run', 'r')) {
+        $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER = 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .cargo/run-with-gstreamer.ps1'
+    }
 
     Push-Location -LiteralPath $repositoryRoot
     try {
@@ -184,6 +191,7 @@ try {
 }
 finally {
     [void][TownLightCargoNativeErrorMode]::SetErrorMode($priorErrorMode)
+    $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER = $priorTargetRunner
     $env:PATH = $priorPath
     $env:GST_PLUGIN_PATH_1_0 = $priorPluginPath
     $env:GST_PLUGIN_SYSTEM_PATH_1_0 = $priorPluginSystemPath
