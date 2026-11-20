@@ -37,7 +37,7 @@ Package: civiccast-lab
 Version: $version
 Architecture: $(dpkg --print-architecture)
 Maintainer: CivicCast Lab
-Depends: systemd, init-system-helpers, adduser, ca-certificates
+Depends: systemd, init-system-helpers, adduser, ca-certificates, libgdk-pixbuf-2.0-0, glib-networking, libsqlite3-0, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, gstreamer1.0-plugins-ugly, gstreamer1.0-libav, gstreamer1.0-x
 Description: CivicCast Lab multi-channel station and playout workers
 EOF
 dpkg-deb --root-owner-group --build "$root" "$output"

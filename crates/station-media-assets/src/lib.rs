@@ -722,7 +722,7 @@ pub fn transcode_playout_asset(
     source: impl AsRef<Path>,
     library: impl AsRef<Path>,
 ) -> Result<IngestedAsset, AssetError> {
-    validate_media(&source)?;
+    let metadata = validate_media(&source)?;
     gst::init().map_err(|error| AssetError::Discovery(error.to_string()))?;
     fs::create_dir_all(&library).map_err(|error| AssetError::Io(error.to_string()))?;
     let library = fs::canonicalize(library).map_err(|error| AssetError::Io(error.to_string()))?;
@@ -891,7 +891,13 @@ pub fn transcode_playout_asset(
     pipeline
         .set_state(gst::State::Playing)
         .map_err(|error| AssetError::Discovery(error.to_string()))?;
-    let transcode = wait_for_transcode(&pipeline, &video_linked, &audio_linked);
+    let transcode = wait_for_transcode(
+        &pipeline,
+        &video_linked,
+        &audio_linked,
+        metadata.duration_ns,
+        &temporary,
+    );
     let stopped = stop_pipeline(&pipeline);
     if let Err(error) = transcode {
         let _ = fs::remove_file(&temporary);
@@ -944,17 +950,46 @@ fn wait_for_transcode(
     pipeline: &gst::Pipeline,
     video_linked: &AtomicBool,
     audio_linked: &AtomicBool,
+    source_duration_ns: u64,
+    output: &Path,
 ) -> Result<(), AssetError> {
     let bus = pipeline
         .bus()
         .ok_or_else(|| AssetError::Discovery("transcode pipeline has no bus".into()))?;
-    let deadline = Instant::now() + Duration::from_secs(300);
-    while Instant::now() < deadline {
-        let remaining = deadline.saturating_duration_since(Instant::now());
+    let file_size = |path: &Path| fs::metadata(path).map(|value| value.len()).unwrap_or(0);
+    let hard_cap = Duration::from_secs(48 * 60 * 60);
+    let budget_ns = source_duration_ns
+        .checked_mul(2)
+        .and_then(|value| value.checked_add(300_000_000_000))
+        .unwrap_or(u64::MAX);
+    let hard_budget = Duration::from_nanos(budget_ns)
+        .max(Duration::from_secs(300))
+        .min(hard_cap);
+    let hard_deadline = Instant::now() + hard_budget;
+    let stall_timeout = Duration::from_secs(300);
+    let mut last_activity = Instant::now();
+    let mut observed_size = file_size(output);
+    while Instant::now() < hard_deadline {
+        let now = Instant::now();
+        if now.duration_since(last_activity) >= stall_timeout {
+            return Err(AssetError::Discovery(format!(
+                "canonical transcode stalled: no output size progress for 300 seconds ({} bytes)",
+                observed_size
+            )));
+        }
+        let wait = hard_deadline
+            .min(last_activity + stall_timeout)
+            .saturating_duration_since(now)
+            .min(Duration::from_secs(5));
         let Some(message) = bus.timed_pop(gst::ClockTime::from_nseconds(
-            remaining.as_nanos().min(u128::from(u64::MAX)) as u64,
+            wait.as_nanos().min(u128::from(u64::MAX)) as u64,
         )) else {
-            break;
+            let size = file_size(output);
+            if size > observed_size {
+                observed_size = size;
+                last_activity = Instant::now();
+            }
+            continue;
         };
         match message.view() {
             gst::MessageView::Eos(_) => {
@@ -974,9 +1009,14 @@ fn wait_for_transcode(
             }
             _ => {}
         }
+        let size = file_size(output);
+        if size > observed_size {
+            observed_size = size;
+            last_activity = Instant::now();
+        }
     }
     Err(AssetError::Discovery(
-        "canonical transcode exceeded its 300-second deadline".into(),
+        "canonical transcode exceeded its absolute duration budget".into(),
     ))
 }
 
@@ -1026,15 +1066,25 @@ fn collect_loudness(
     let bus = pipeline
         .bus()
         .ok_or_else(|| AssetError::Discovery("loudness pipeline has no bus".into()))?;
-    let deadline = Instant::now() + Duration::from_secs(120);
+    let hard_deadline = Instant::now() + Duration::from_secs(48 * 60 * 60);
+    let mut stall_deadline = Instant::now() + Duration::from_secs(120);
     let mut integrated_lufs = None;
     let mut analyzed_duration_ns = None;
-    while Instant::now() < deadline {
-        let remaining = deadline.saturating_duration_since(Instant::now());
+    let mut last_running_time_ns: Option<u64> = None;
+    while Instant::now() < hard_deadline {
+        let now = Instant::now();
+        if now >= stall_deadline {
+            return Err(AssetError::Discovery(
+                "loudness measurement stalled: no analyzer progress for 120 seconds".into(),
+            ));
+        }
+        let remaining = hard_deadline
+            .min(stall_deadline)
+            .saturating_duration_since(now);
         let Some(message) = bus.timed_pop(gst::ClockTime::from_nseconds(
             remaining.as_nanos().min(u128::from(u64::MAX)) as u64,
         )) else {
-            break;
+            continue;
         };
         match message.view() {
             gst::MessageView::Element(element) => {
@@ -1054,6 +1104,10 @@ fn collect_loudness(
                     if let Ok(value) = structure.get::<u64>("running-time")
                         && value != u64::MAX
                     {
+                        if last_running_time_ns.map_or(true, |previous| value > previous) {
+                            last_running_time_ns = Some(value);
+                            stall_deadline = Instant::now() + Duration::from_secs(120);
+                        }
                         analyzed_duration_ns = Some(analyzed_duration_ns.unwrap_or(0).max(value));
                     }
                 }
@@ -1097,7 +1151,7 @@ fn collect_loudness(
         }
     }
     Err(AssetError::Discovery(
-        "loudness measurement exceeded its 120-second processing deadline".into(),
+        "loudness measurement exceeded its absolute 48-hour processing limit".into(),
     ))
 }
 
