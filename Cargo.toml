@@ -46,6 +46,7 @@ members = [
     "crates/station-feed-normalization",
     "crates/station-feed-fetch",
     "crates/station-support",
+    "crates/station-secrets",
     "crates/station-storage",
     "crates/station-update",
     "crates/station-update-coordinator",
@@ -115,6 +116,7 @@ station-source-evidence = { path = "crates/station-source-evidence" }
 station-feed-normalization = { path = "crates/station-feed-normalization" }
 station-feed-fetch = { path = "crates/station-feed-fetch" }
 station-support = { path = "crates/station-support" }
+station-secrets = { path = "crates/station-secrets" }
 station-storage = { path = "crates/station-storage" }
 station-update = { path = "crates/station-update" }
 station-update-coordinator = { path = "crates/station-update-coordinator" }

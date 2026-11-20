@@ -24,3 +24,15 @@ closed-caption plugin. The ingest loudness analyzer uses the Rust audiofx plugin
 Windows development uses the safe Cargo wrapper in scripts/. The installed
 station and its 3-, 6-, and 9-channel capacities still need qualification on
 the three reference machines.
+
+On macOS and Ubuntu the service reads its 32-byte AES-GCM key from
+`station-master.key` in its credential directory. Ubuntu uses the systemd
+`CREDENTIALS_DIRECTORY` when available and otherwise uses
+`/etc/civiccast-lab/credentials`. macOS uses
+`/Library/Application Support/CivicCast Lab/credentials`. Set
+`CIVICCAST_CREDENTIAL_DIRECTORY` to use a different absolute directory.
+Provision a cryptographically random key when setting up a new station.
+The service requires a regular file readable only by its owner, owned by
+the service account or root. Keep the same key through upgrades and
+rollback. Restoring encrypted station credentials requires restoring that
+key separately from the database. Windows continues to use machine DPAPI.
