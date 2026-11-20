@@ -792,21 +792,13 @@ impl PersistentPlayout {
             .build()
             .map_err(|error| build_error("videorate", error))?;
         let convert = element("videoconvert", "output-convert")?;
-        let caps = video_caps(profile)?;
+        let (encoder, output_format) = video_encoder(profile)?;
+        let caps = video_caps_with_format(profile, output_format)?;
         let caps_filter = gst::ElementFactory::make("capsfilter")
             .name("canonical-video")
             .property("caps", &caps)
             .build()
             .map_err(|error| build_error("capsfilter", error))?;
-        let encoder = gst::ElementFactory::make("openh264enc")
-            .name("video-encoder")
-            .property("bitrate", profile.video_bitrate_bps)
-            .property("max-bitrate", profile.video_bitrate_bps)
-            .property("gop-size", two_second_gop(profile))
-            .property("enable-frame-skip", false)
-            .property_from_str("rate-control", "bitrate")
-            .build()
-            .map_err(|error| build_error("openh264enc", error))?;
         let parser = gst::ElementFactory::make("h264parse")
             .name("video-parser")
             .property("config-interval", 1_i32)
@@ -4201,6 +4193,13 @@ fn build_loudness_variant(
 }
 
 fn video_caps(profile: &OutputProfile) -> Result<gst::Caps, EngineError> {
+    video_caps_with_format(profile, "I420")
+}
+
+fn video_caps_with_format(
+    profile: &OutputProfile,
+    format: &'static str,
+) -> Result<gst::Caps, EngineError> {
     let width = i32::try_from(profile.width)
         .map_err(|_| EngineError::Pipeline("output width exceeds GStreamer range".into()))?;
     let height = i32::try_from(profile.height)
@@ -4212,7 +4211,7 @@ fn video_caps(profile: &OutputProfile) -> Result<gst::Caps, EngineError> {
         EngineError::Pipeline("frame-rate denominator exceeds GStreamer range".into())
     })?;
     Ok(gst::Caps::builder("video/x-raw")
-        .field("format", "I420")
+        .field("format", format)
         .field("width", width)
         .field("height", height)
         .field("framerate", gst::Fraction::new(numerator, denominator))
@@ -4520,6 +4519,50 @@ fn video_caps_filter(
         .property("caps", &caps)
         .build()
         .map_err(|error| build_error("capsfilter", error))
+}
+
+fn video_encoder(profile: &OutputProfile) -> Result<(gst::Element, &'static str), EngineError> {
+    match std::env::var("TOWNLIGHT_VIDEO_ENCODER") {
+        Ok(requested) if requested == "mfh264enc" => {
+            if !cfg!(target_os = "windows") {
+                return Err(EngineError::Pipeline(
+                    "TOWNLIGHT_VIDEO_ENCODER=mfh264enc is only supported on Windows".into(),
+                ));
+            }
+            let bitrate = u32::try_from(profile.video_bitrate_bps / 1000)
+                .map_err(|_| EngineError::Pipeline("MFH264 bitrate exceeds range".into()))?;
+            let gop_size = i32::try_from(two_second_gop(profile))
+                .map_err(|_| EngineError::Pipeline("MFH264 GOP size exceeds range".into()))?;
+            let encoder = gst::ElementFactory::make("mfh264enc")
+                .name("video-encoder")
+                .property("bitrate", bitrate)
+                .property("gop-size", gop_size)
+                .property("bframes", 0u32)
+                .property_from_str("rc-mode", "cbr")
+                .property("low-latency", true)
+                .build()
+                .map_err(|error| build_error("mfh264enc", error))?;
+            Ok((encoder, "NV12"))
+        }
+        Ok(requested) => Err(EngineError::Pipeline(format!(
+            "unsupported TOWNLIGHT_VIDEO_ENCODER={requested}"
+        ))),
+        Err(std::env::VarError::NotPresent) => {
+            let encoder = gst::ElementFactory::make("openh264enc")
+                .name("video-encoder")
+                .property("bitrate", profile.video_bitrate_bps)
+                .property("max-bitrate", profile.video_bitrate_bps)
+                .property("gop-size", two_second_gop(profile))
+                .property("enable-frame-skip", false)
+                .property_from_str("rate-control", "bitrate")
+                .build()
+                .map_err(|error| build_error("openh264enc", error))?;
+            Ok((encoder, "I420"))
+        }
+        Err(std::env::VarError::NotUnicode(_)) => Err(EngineError::Pipeline(
+            "TOWNLIGHT_VIDEO_ENCODER is not valid Unicode".into(),
+        )),
+    }
 }
 
 fn two_second_gop(profile: &OutputProfile) -> u32 {
