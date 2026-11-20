@@ -1,3 +1,9 @@
+#[cfg(unix)]
+mod unix_fence;
+#[cfg(unix)]
+use unix_fence::acquire_authority_fence_for;
+#[cfg(unix)]
+mod unix_fs;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -6,18 +12,28 @@ use station_update::{
     verify_prepared_slot,
 };
 use std::collections::BTreeSet;
+#[cfg(windows)]
 use std::ffi::c_void;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
+#[cfg(windows)]
 use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+#[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
+#[cfg(unix)]
+use unix_fs::{
+    authority_root_identity, move_tree, open_authority_root, replace_file,
+    station_database_identity,
+};
+#[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{
     BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
     FILE_ID_INFO, FILE_SHARE_READ, FILE_SHARE_WRITE, FileIdInfo, GetFileInformationByHandle,
     GetFileInformationByHandleEx, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
 };
+#[cfg(windows)]
 use windows_sys::Win32::{
     Foundation::{CloseHandle, HANDLE, LocalFree, WAIT_ABANDONED, WAIT_OBJECT_0},
     Security::{GetKernelObjectSecurity, SECURITY_ATTRIBUTES},
@@ -66,10 +82,14 @@ const REQUIRED_TSDUCK_RUNTIME_FILES: [&str; 7] = [
 ];
 const INSTALL_AUTHORITY_FENCE_TIMEOUT: Duration = Duration::from_secs(30);
 // MUTEX_ALL_ACCESS after Windows applies the kernel object's generic mapping.
+#[cfg(windows)]
 const INSTALL_AUTHORITY_FENCE_SDDL: &str = "D:P(A;;0x1f0001;;;SY)(A;;0x1f0001;;;BA)";
+#[cfg(windows)]
 const DACL_SECURITY_INFORMATION: u32 = 0x0000_0004;
+#[cfg(windows)]
 const SECURITY_DESCRIPTOR_REVISION: u32 = 1;
 
+#[cfg(windows)]
 #[link(name = "advapi32")]
 unsafe extern "system" {
     fn ConvertStringSecurityDescriptorToSecurityDescriptorW(
@@ -93,6 +113,7 @@ unsafe extern "system" {
     ) -> i32;
 }
 
+#[cfg(windows)]
 #[repr(C)]
 struct AclHeader {
     revision: u8,
@@ -100,8 +121,10 @@ struct AclHeader {
     size: u16,
 }
 
+#[cfg(windows)]
 struct InstallFenceSecurity(*mut c_void);
 
+#[cfg(windows)]
 impl InstallFenceSecurity {
     fn local_system_and_administrators() -> Result<Self, String> {
         let wide: Vec<u16> = INSTALL_AUTHORITY_FENCE_SDDL
@@ -138,12 +161,14 @@ impl InstallFenceSecurity {
     }
 }
 
+#[cfg(windows)]
 impl Drop for InstallFenceSecurity {
     fn drop(&mut self) {
         unsafe { LocalFree(self.0) };
     }
 }
 
+#[cfg(windows)]
 fn descriptor_dacl_bytes(descriptor: *mut c_void) -> Result<Vec<u8>, String> {
     let mut present = 0;
     let mut defaulted = 0;
@@ -163,6 +188,7 @@ fn descriptor_dacl_bytes(descriptor: *mut c_void) -> Result<Vec<u8>, String> {
     Ok(unsafe { std::slice::from_raw_parts(dacl.cast::<u8>(), size) }.to_vec())
 }
 
+#[cfg(windows)]
 fn descriptor_dacl_string(descriptor: *mut c_void) -> Result<String, String> {
     // Validate the ACL structure before asking Windows to serialize it.
     let _ = descriptor_dacl_bytes(descriptor)?;
@@ -190,6 +216,7 @@ fn descriptor_dacl_string(descriptor: *mut c_void) -> Result<String, String> {
     value
 }
 
+#[cfg(windows)]
 fn verify_install_fence_security(
     handle: HANDLE,
     expected: &InstallFenceSecurity,
@@ -234,14 +261,17 @@ fn verify_install_fence_security(
 /// and a receipt commit.  Every participating process holds this named mutex
 /// over its verified-candidate read and durable decision.
 pub struct InstallAuthorityFence {
+    #[cfg(unix)]
+    _lease: unix_fence::Lease,
+    #[cfg(windows)]
     handle: HANDLE,
     abandoned: bool,
     authority_root: PathBuf,
-    authority_root_identity: (u32, u64),
+    authority_root_identity: (u64, u64),
     // This no-follow handle deliberately excludes FILE_SHARE_DELETE, keeping
     // the exact authority root from being renamed while the fence is held.
     _authority_root_handle: File,
-    application_root: Option<(PathBuf, (u32, u64), File)>,
+    application_root: Option<(PathBuf, (u64, u64), File)>,
 }
 
 impl InstallAuthorityFence {
@@ -292,6 +322,7 @@ impl InstallAuthorityFence {
     }
 }
 
+#[cfg(windows)]
 impl Drop for InstallAuthorityFence {
     fn drop(&mut self) {
         unsafe {
@@ -374,6 +405,10 @@ pub fn pin_station_database(
         return Err("station database file name is invalid".into());
     }
     let candidate = canonical_root.join(leaf);
+    #[cfg(unix)]
+    let database_handle = unix_fs::open_database(&root_handle, leaf)
+        .map_err(|e| format!("open pinned station database: {e}"))?;
+    #[cfg(windows)]
     let database_handle = OpenOptions::new()
         .read(true)
         .write(true)
@@ -385,11 +420,7 @@ pub fn pin_station_database(
     let metadata = database_handle
         .metadata()
         .map_err(|error| format!("inspect pinned station database: {error}"))?;
-    if !metadata.is_file()
-        || metadata.file_attributes()
-            & windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT
-            != 0
-    {
+    if !metadata.is_file() || is_reparse_point(&metadata) {
         return Err("station database is not a regular non-reparse file".into());
     }
     let identity = station_database_identity(&database_handle)?;
@@ -445,6 +476,7 @@ fn acquire_install_authority_fence_for(
     })
 }
 
+#[cfg(windows)]
 fn acquire_authority_fence_for<F>(
     data_directory: &Path,
     timeout: Duration,
@@ -504,7 +536,7 @@ where
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, windows))]
 fn install_authority_fence_name(data_directory: &Path) -> Result<String, String> {
     let canonical = canonical_install_authority_root(data_directory)?;
     Ok(install_authority_fence_name_for_canonical_root(&canonical))
@@ -527,6 +559,7 @@ fn station_store_initialization_fence_name_for_database(
     format!("Global\\TownLightStation.StoreInitialization.{digest}")
 }
 
+#[cfg(windows)]
 fn station_database_identity(file: &File) -> Result<StationDatabaseIdentity, String> {
     let mut information = FILE_ID_INFO::default();
     let information_size = u32::try_from(std::mem::size_of::<FILE_ID_INFO>())
@@ -556,6 +589,7 @@ fn station_database_identity(file: &File) -> Result<StationDatabaseIdentity, Str
     })
 }
 
+#[cfg(windows)]
 fn open_authority_root(path: &Path) -> Result<File, String> {
     let file = OpenOptions::new()
         .read(true)
@@ -576,7 +610,8 @@ fn open_authority_root(path: &Path) -> Result<File, String> {
     Ok(file)
 }
 
-fn authority_root_identity(file: &File) -> Result<(u32, u64), String> {
+#[cfg(windows)]
+fn authority_root_identity(file: &File) -> Result<(u64, u64), String> {
     let mut information = BY_HANDLE_FILE_INFORMATION::default();
     if unsafe { GetFileInformationByHandle(file.as_raw_handle() as HANDLE, &mut information) } == 0
     {
@@ -587,7 +622,7 @@ fn authority_root_identity(file: &File) -> Result<(u32, u64), String> {
     if information.dwVolumeSerialNumber == 0 || index == 0 {
         return Err("installation authority root identity is invalid".into());
     }
-    Ok((information.dwVolumeSerialNumber, index))
+    Ok((u64::from(information.dwVolumeSerialNumber), index))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -2475,7 +2510,6 @@ fn is_sha256_lowercase(value: &str) -> bool {
 
 #[cfg(windows)]
 fn is_reparse_point(metadata: &std::fs::Metadata) -> bool {
-    use std::os::windows::fs::MetadataExt;
     const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
     metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
 }
@@ -2790,6 +2824,7 @@ fn read_bounded_file(path: &Path, maximum: u64, label: &str) -> Result<Vec<u8>, 
     std::fs::read(path).map_err(|error| format!("could not read {label}: {error}"))
 }
 
+#[cfg(windows)]
 fn replace_file(source: &Path, destination: &Path) -> std::io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
     let source = source
@@ -2817,6 +2852,7 @@ fn replace_file(source: &Path, destination: &Path) -> std::io::Result<()> {
     }
 }
 
+#[cfg(windows)]
 fn move_tree(source: &Path, destination: &Path) -> std::io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
 
@@ -2991,6 +3027,7 @@ mod tests {
         remove_tree(&root).unwrap();
     }
 
+    #[cfg(windows)]
     #[test]
     fn install_authority_fence_rejects_a_squatted_permissive_object() {
         let root = root("install-authority-squat");
@@ -3009,6 +3046,7 @@ mod tests {
         remove_tree(&root).unwrap();
     }
 
+    #[cfg(windows)]
     #[test]
     fn abandoned_fence_retains_ownership_until_recovery_releases_it() {
         let root = root("install-authority-abandoned");
@@ -3057,6 +3095,37 @@ mod tests {
         assert!(!normal.was_abandoned());
         drop(normal);
         remove_tree(&root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_exit_preserves_an_abandoned_station_fence() {
+        const CHILD_ROOT: &str = "CIVICCAST_TEST_ABANDONED_FENCE_ROOT";
+        if let Some(path) = std::env::var_os(CHILD_ROOT) {
+            let _fence = acquire_install_authority_fence(Path::new(&path)).unwrap();
+            std::process::exit(0);
+        }
+        let data = root("abandoned-unix-fence");
+        std::fs::create_dir(&data).unwrap();
+        let child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "tests::process_exit_preserves_an_abandoned_station_fence",
+            ])
+            .env(CHILD_ROOT, &data)
+            .status()
+            .unwrap();
+        assert!(child.success());
+        let recovery = acquire_install_authority_fence(&data).unwrap();
+        assert!(recovery.was_abandoned());
+        assert!(acquire_install_authority_fence_for(&data, Duration::ZERO).is_err());
+        drop(recovery);
+        assert!(
+            !acquire_install_authority_fence(&data)
+                .unwrap()
+                .was_abandoned()
+        );
+        remove_tree(&data).unwrap();
     }
 
     #[test]
@@ -3154,6 +3223,9 @@ mod tests {
 
     #[test]
     fn absent_snapshot_removes_a_dangling_live_root_symlink() {
+        #[cfg(unix)]
+        use std::os::unix::fs::symlink as symlink_file;
+        #[cfg(windows)]
         use std::os::windows::fs::symlink_file;
 
         let root = root("absent-dangling-root");

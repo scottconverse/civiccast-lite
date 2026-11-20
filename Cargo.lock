@@ -1903,6 +1903,7 @@ dependencies = [
 name = "station-maintenance"
 version = "0.1.0"
 dependencies = [
+ "rustix",
  "semver",
  "serde",
  "serde_json",
