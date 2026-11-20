@@ -6,10 +6,12 @@ mod agenda_authority;
 mod automation_execution_authority;
 mod automation_summary_authority;
 pub use agenda_authority::{AgendaHistoryEntry, AgendaWriteError};
-#[cfg(test)]
+#[cfg(all(test, windows))]
 mod automation_execution_authority_tests;
 mod media_lifecycle_authority;
 mod ott_authority;
+// This diagnostic drives the attested Windows TSDuck package.
+#[cfg(windows)]
 mod transport_executor;
 pub use automation_execution_authority::{
     AutomationExecutionJobRecord, AutomationExecutionJobState,
@@ -23,7 +25,10 @@ pub use media_lifecycle_authority::{AssetRetentionHistoryEntry, MediaLifecycleSc
 pub use ott_authority::{
     OttAuthorityError, OttBeaconCollection, OttCatalogHistoryEntry, OttSessionIssue,
 };
+// This optional helper runs a verified Windows executable in a Windows job object.
+#[cfg(windows)]
 mod automation_execution_controller;
+#[cfg(windows)]
 pub use automation_execution_controller::{
     AutomationExecutionAdapter, AutomationExecutionAdapterFailure, AutomationExecutionSetupFault,
     automation_execution_process_limits_for_test, retained_pipe_wait_is_bounded_for_test,
@@ -33,6 +38,7 @@ pub use automation_execution_controller::{
     run_automation_execution_queue_controller, run_automation_execution_queue_iteration,
 };
 use std::ffi::{CStr, CString, c_char, c_int, c_longlong, c_void};
+#[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::path::{Component, Path, PathBuf};
 use std::ptr;
@@ -49,8 +55,9 @@ use std::{
     },
     time::{Instant, SystemTime},
 };
+#[cfg(windows)]
 pub use transport_executor::run_transport_proof_queue_controller;
-#[cfg(feature = "test-injection")]
+#[cfg(all(windows, feature = "test-injection"))]
 #[doc(hidden)]
 pub mod test_support {
     pub use super::transport_executor::{
@@ -195,7 +202,16 @@ const SQLITE_OPEN_READWRITE: c_int = 0x0000_0002;
 const SQLITE_OPEN_CREATE: c_int = 0x0000_0004;
 const SQLITE_OPEN_FULLMUTEX: c_int = 0x0001_0000;
 const CG_IMAGE_VERIFICATION_CACHE_LIMIT: usize = 256;
-const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
+fn is_link_metadata(metadata: &std::fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        metadata.file_attributes() & 0x0400 != 0
+    }
+    #[cfg(unix)]
+    {
+        metadata.file_type().is_symlink()
+    }
+}
 const OUTPUT_LOUDNESS_MAX_CAPTURE_BYTES: u64 = 1024 * 1024 * 1024;
 const OUTPUT_LOUDNESS_MIN_DURATION_MS: u64 = 3_000;
 const OUTPUT_LOUDNESS_MAX_DURATION_MS: u64 = 600_000;
@@ -4823,12 +4839,7 @@ impl StationStore {
             }
         };
         let metadata = match fs::symlink_metadata(&path) {
-            Ok(metadata)
-                if metadata.is_file()
-                    && metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0 =>
-            {
-                metadata
-            }
+            Ok(metadata) if metadata.is_file() && !crate::is_link_metadata(&metadata) => metadata,
             _ => {
                 self.cg_image_verification_cache
                     .lock()
@@ -8672,8 +8683,7 @@ impl StationStore {
         if path.exists() {
             let metadata = fs::symlink_metadata(&path)
                 .map_err(|error| format!("inspect immutable image: {error}"))?;
-            if !metadata.is_file() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-            {
+            if !metadata.is_file() || crate::is_link_metadata(&metadata) {
                 return Err("managed image path is not a regular non-reparse file".into());
             }
             let existing =

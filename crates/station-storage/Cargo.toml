@@ -34,17 +34,22 @@ station-recording.workspace = true
 station-schedule.workspace = true
 station-schedule-automation.workspace = true
 station-update.workspace = true
-station-windows-ipc.workspace = true
 station-underwriting.workspace = true
 station-transport-proof.workspace = true
 ureq.workspace = true
-windows-sys.workspace = true
 station-reporting.workspace = true
 station-media-journal.workspace = true
 station-media-protocol.workspace = true
 station-ott-contract.workspace = true
 station-ott-runtime.workspace = true
 zeroize.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "=1.1.4", features = ["fs"] }
+
+[target.'cfg(windows)'.dependencies]
+station-windows-ipc.workspace = true
+windows-sys.workspace = true
 
 [dev-dependencies]
 image.workspace = true

@@ -2112,6 +2112,7 @@ dependencies = [
  "image",
  "jiff",
  "libsqlite3-sys",
+ "rustix",
  "serde",
  "serde_json",
  "sha2",

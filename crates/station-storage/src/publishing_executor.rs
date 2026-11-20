@@ -23,6 +23,7 @@ use std::sync::{
 };
 use std::time::Duration;
 
+#[cfg(windows)]
 mod youtube_live_runtime;
 
 const MAX_PUBLISH_ATTEMPTS: u32 = 8;
@@ -1196,6 +1197,13 @@ impl PublishProviderAdapter for SystemPublishProviderAdapter<'_> {
                     "Internet Archive accepted the exact bounded object delivery.",
                 )?
             }
+            #[cfg(unix)]
+            PublishExecutionTargetConfig::YouTubeLive { .. } => {
+                return Err(
+                    "the one-shot publisher requires its attested Windows worker package".into(),
+                );
+            }
+            #[cfg(windows)]
             PublishExecutionTargetConfig::YouTubeLive {
                 channel_id,
                 broadcast_id,
@@ -1492,7 +1500,7 @@ fn prepare_nas_destination(
     loop {
         match std::fs::symlink_metadata(&existing) {
             Ok(metadata) => {
-                if metadata.file_attributes() & 0x0400 != 0 || !metadata.is_dir() {
+                if crate::is_link_metadata(&metadata) || !metadata.is_dir() {
                     return Err("managed NAS root contains a reparse point or non-directory".into());
                 }
                 break;
@@ -1909,6 +1917,23 @@ fn open_nas_directory_no_follow(path: &Path) -> Result<File, String> {
     open_nas_directory_no_follow_with_share(path, false)
 }
 
+#[cfg(unix)]
+fn open_nas_directory_relative(
+    parent: &File,
+    leaf: &std::ffi::OsStr,
+    _: bool,
+) -> Result<File, String> {
+    use rustix::fs::{Mode, OFlags, openat};
+    openat(
+        parent,
+        leaf,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map(File::from)
+    .map_err(|e| format!("open managed NAS directory: {e}"))
+}
+
 #[cfg(windows)]
 fn open_nas_directory_relative(
     parent: &File,
@@ -1973,7 +1998,7 @@ fn open_nas_directory_relative(
     let metadata = file
         .metadata()
         .map_err(|_| "managed NAS directory could not be inspected")?;
-    if metadata.file_attributes() & 0x0400 != 0 || !metadata.is_dir() {
+    if crate::is_link_metadata(&metadata) || !metadata.is_dir() {
         return Err("managed NAS ancestry component is a reparse point or not a directory".into());
     }
     Ok(file)
@@ -2011,7 +2036,7 @@ fn open_nas_directory_no_follow_with_share(
     let metadata = file
         .metadata()
         .map_err(|_| "managed NAS directory could not be inspected")?;
-    if metadata.file_attributes() & 0x0400 != 0 || !metadata.is_dir() {
+    if crate::is_link_metadata(&metadata) || !metadata.is_dir() {
         return Err(format!(
             "managed NAS directory is a reparse point or not a directory: {}",
             path.display()
@@ -2055,7 +2080,23 @@ fn open_publish_source_no_follow(path: &Path) -> Result<File, String> {
 
 #[cfg(not(windows))]
 fn open_publish_source_no_follow(path: &Path) -> Result<File, String> {
-    File::open(path).map_err(|_| "publish media could not be opened")
+    use rustix::fs::{Mode, OFlags, open};
+    let file = File::from(
+        open(
+            path,
+            OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NONBLOCK,
+            Mode::empty(),
+        )
+        .map_err(|_| "publish media could not be opened".to_string())?,
+    );
+    if !file
+        .metadata()
+        .map_err(|_| "publish media could not be inspected")?
+        .is_file()
+    {
+        return Err("publish media is not a regular file".into());
+    }
+    Ok(file)
 }
 
 fn unique_nas_temp_path(root: &Path, job_id: &str) -> Result<PathBuf, String> {

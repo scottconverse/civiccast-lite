@@ -1130,7 +1130,7 @@ impl StationStore {
     fn ensure_summary_directory(&self, path: &Path) -> Result<(), String> {
         let metadata = fs::symlink_metadata(path)
             .map_err(|error| format!("inspect managed summary directory: {error}"))?;
-        if !metadata.is_dir() || metadata.file_attributes() & 0x400 != 0 {
+        if !metadata.is_dir() || crate::is_link_metadata(&metadata) {
             return Err("managed summary directory is a reparse point or not a directory".into());
         }
         let canonical = fs::canonicalize(path)
@@ -1153,7 +1153,7 @@ impl StationStore {
     }
     fn ensure_summary_content(&self, path: &Path, bytes: &[u8], label: &str) -> Result<(), String> {
         if let Ok(metadata) = fs::symlink_metadata(path) {
-            if !metadata.is_file() || metadata.file_attributes() & 0x400 != 0 {
+            if !metadata.is_file() || crate::is_link_metadata(&metadata) {
                 return Err(format!("managed {label} is a reparse point or not a file"));
             }
             let existing = fs::read(path)
@@ -1207,7 +1207,7 @@ impl StationStore {
     ) -> Result<Vec<u8>, String> {
         let metadata =
             fs::symlink_metadata(path).map_err(|_| format!("managed {label} is missing"))?;
-        if !metadata.is_file() || metadata.file_attributes() & 0x400 != 0 {
+        if !metadata.is_file() || crate::is_link_metadata(&metadata) {
             return Err(format!("managed {label} is a reparse point or not a file"));
         }
         let bytes = fs::read(path).map_err(|_| format!("read managed {label} failed"))?;
