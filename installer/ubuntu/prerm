@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+case "$1" in
+    remove|upgrade|deconfigure)
+        if test -d /run/systemd/system; then deb-systemd-invoke stop civiccast-lab.service; fi ;;
+esac

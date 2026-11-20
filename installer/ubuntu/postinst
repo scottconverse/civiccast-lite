@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+test "$1" = configure || exit 0
+if ! getent passwd civiccast-lab >/dev/null; then
+    adduser --system --group --no-create-home --home /var/lib/civiccast-lab civiccast-lab
+fi
+install -d -o civiccast-lab -g civiccast-lab -m 755 /var/www/civiccast-lab
+credentials=/etc/civiccast-lab/credentials
+install -d -o root -g root -m 700 "$credentials"
+if ! test -e "$credentials/station-master.key"; then
+    key=$(mktemp "$credentials/.master.XXXXXXXX")
+    trap 'rm -f "$key"' EXIT
+    dd if=/dev/urandom of="$key" bs=32 count=1 status=none
+    ln "$key" "$credentials/station-master.key"
+    rm "$key"
+    trap - EXIT
+fi
+if deb-systemd-helper debian-installed civiccast-lab.service; then
+    deb-systemd-helper unmask civiccast-lab.service
+fi
+if deb-systemd-helper was-enabled civiccast-lab.service; then
+    deb-systemd-helper enable civiccast-lab.service
+fi
+if test -d /run/systemd/system; then
+    systemctl daemon-reload
+    deb-systemd-invoke start civiccast-lab.service
+fi

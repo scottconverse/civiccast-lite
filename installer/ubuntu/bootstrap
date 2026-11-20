@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+app=/usr/lib/civiccast-lab
+state=/var/lib/civiccast-lab
+"$app/runtime/gstreamer/bin/gst-inspect-1.0" mpegtsmux >/dev/null
+if ! test -e "$state/station.db"; then
+    "$app/stationd" auth issue-bootstrap-handoff --database "$state/station.db" --handoff "$state/operator-bootstrap.capability"
+fi

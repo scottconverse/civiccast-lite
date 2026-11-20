@@ -1,0 +1,25 @@
+[Unit]
+Description=CivicCast Lab station
+After=network.target
+
+[Service]
+User=civiccast-lab
+Group=civiccast-lab
+StateDirectory=civiccast-lab
+StateDirectoryMode=0700
+WorkingDirectory=/var/lib/civiccast-lab
+Environment=HOME=/var/lib/civiccast-lab
+Environment=CIVICCAST_PORTAL_ROOT=/var/www/civiccast-lab
+Environment=LD_LIBRARY_PATH=/usr/lib/civiccast-lab/runtime/gstreamer/lib
+Environment=GST_PLUGIN_SYSTEM_PATH_1_0=/usr/lib/civiccast-lab/runtime/gstreamer/lib/gstreamer-1.0
+Environment=GST_PLUGIN_SCANNER=/usr/lib/civiccast-lab/runtime/gstreamer/libexec/gstreamer-1.0/gst-plugin-scanner
+Environment=GST_REGISTRY=/var/lib/civiccast-lab/gst-registry.bin
+LoadCredential=station-master.key:/etc/civiccast-lab/credentials/station-master.key
+ExecStartPre=/usr/lib/civiccast-lab/bootstrap
+ExecStart=/usr/lib/civiccast-lab/stationd service --database /var/lib/civiccast-lab/station.db --address 127.0.0.1:8787
+Restart=on-failure
+RestartSec=3
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target
