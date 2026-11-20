@@ -1,3 +1,4 @@
 
 # The accepted media lock hashes original bytes, including original line endings.
 beta-1/media-source/** -text
+installer/macos/** text eol=lf
