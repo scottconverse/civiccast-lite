@@ -200,6 +200,11 @@ fn duplicate_retained_manifest_authority(
     Ok(None)
 }
 
+#[cfg(unix)]
+struct EarlyReaderLease {
+    _lease: File,
+}
+
 #[cfg(windows)]
 struct EarlyReaderLease {
     root: PathBuf,
@@ -242,10 +247,14 @@ fn begin_incremental_reader_lease(
             root: root.to_path_buf(),
         }))
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     {
-        let _ = (root, enabled);
-        Ok(None)
+        if !enabled {
+            return Ok(None);
+        }
+        let lease = open_lock_sidecar(&reader_lease_path(root))?;
+        lease.try_lock_shared().map_err(|e| io_error(e.into()))?;
+        Ok(Some(EarlyReaderLease { _lease: lease }))
     }
 }
 
@@ -259,6 +268,15 @@ fn take_incremental_reader_lease(root: &Path) -> Result<File, JournalError> {
         return Ok(lease);
     }
     acquire_reader_lease(root)
+}
+
+// Storage verifies and acknowledges a projection on the same thread as its
+// SQLite transaction. A held shared lock prevents generation replacement from
+// verification through commit, including across processes.
+#[cfg(unix)]
+thread_local! {
+    static PROJECTION_LEASES: std::cell::RefCell<HashMap<PathBuf, File>> =
+        std::cell::RefCell::new(HashMap::new());
 }
 
 fn release_verified_prefix_session(path: &Path) {
@@ -280,10 +298,10 @@ fn release_verified_prefix_session(path: &Path) {
         let lease = reader_lease_path(path);
         let _ = std::fs::remove_file(lease);
     }
-    #[cfg(not(windows))]
-    {
-        let _ = path;
-    }
+    #[cfg(unix)]
+    PROJECTION_LEASES.with_borrow_mut(|leases| {
+        leases.remove(path);
+    });
 }
 
 /// Acknowledge the projection transaction without discarding this process's
@@ -311,13 +329,10 @@ pub fn acknowledge_incremental_reader(path: impl AsRef<Path>) {
             .remove(root);
         let _ = std::fs::remove_file(reader_lease_path(root));
     }
-    #[cfg(not(windows))]
-    {
-        let _ = path;
-    }
+    #[cfg(unix)]
+    release_verified_prefix_session(path.as_ref());
 }
 
-#[cfg(windows)]
 fn reader_lease_path(path: &Path) -> PathBuf {
     let mut lease: OsString = path.as_os_str().to_owned();
     lease.push(".reader-lease");
@@ -1217,15 +1232,46 @@ fn try_acquire_publication_gate(path: &Path) -> Result<Option<File>, JournalErro
     }
 }
 
-#[cfg(not(windows))]
-fn try_acquire_publication_gate(_path: &Path) -> Result<Option<File>, JournalError> {
-    Ok(None)
+#[cfg(unix)]
+fn open_lock_sidecar(path: &Path) -> Result<File, JournalError> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path)
+        .map_err(io_error)?;
+    let meta = file.metadata().map_err(io_error)?;
+    if !meta.is_file()
+        || meta.nlink() != 1
+        || meta.uid() != unsafe { libc::geteuid() }
+        || meta.mode() & 0o077 != 0
+    {
+        return Err(corrupt(0, "unsafe journal ownership sidecar"));
+    }
+    Ok(file)
 }
 
-#[cfg(not(windows))]
+#[cfg(unix)]
+fn try_exclusive_sidecar(path: &Path) -> Result<Option<File>, JournalError> {
+    let file = open_lock_sidecar(path)?;
+    match file.try_lock() {
+        Ok(()) => Ok(Some(file)),
+        Err(std::fs::TryLockError::WouldBlock) => Ok(None),
+        Err(std::fs::TryLockError::Error(e)) => Err(io_error(e)),
+    }
+}
+
+#[cfg(unix)]
+fn try_acquire_publication_gate(path: &Path) -> Result<Option<File>, JournalError> {
+    try_exclusive_sidecar(&reader_lease_path(path))
+}
+
+#[cfg(unix)]
 fn reader_lease_is_active(path: &Path) -> Result<bool, JournalError> {
-    let _ = path;
-    Ok(false)
+    Ok(try_acquire_publication_gate(path)?.is_none())
 }
 
 #[cfg(test)]
@@ -1442,6 +1488,10 @@ impl JournalWriter {
         // inspection.  Otherwise an old worker and its replacement could both
         // observe the same next sequence and append independently.
         let mut ownership = acquire_writer_ownership(&root_path)?;
+        #[cfg(unix)]
+        let _recovery_gate = try_acquire_publication_gate(&root_path)?.ok_or_else(|| {
+            JournalError::Io("journal reader is active during writer recovery".into())
+        })?;
         recover_compaction_temp(&root_path, worker_id, channel_id)?;
         // If recovery itself publishes a manifest, retain that exact
         // FileRenameInfo source handle through writer activation. Reopening
@@ -2048,9 +2098,37 @@ fn promote_file_write_through(source: &Path, destination: &Path) -> std::io::Res
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(unix)]
+fn sync_journal_directory(path: &Path) -> std::io::Result<()> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    File::open(parent)?.sync_all()
+}
+
+#[cfg(unix)]
 fn promote_file_write_through(source: &Path, destination: &Path) -> std::io::Result<()> {
-    std::fs::rename(source, destination)
+    use std::os::unix::ffi::OsStrExt;
+    let from = std::ffi::CString::new(source.as_os_str().as_bytes())?;
+    let to = std::ffi::CString::new(destination.as_os_str().as_bytes())?;
+    #[cfg(target_os = "linux")]
+    let result = unsafe {
+        libc::syscall(
+            libc::SYS_renameat2,
+            libc::AT_FDCWD,
+            from.as_ptr(),
+            libc::AT_FDCWD,
+            to.as_ptr(),
+            libc::RENAME_NOREPLACE,
+        )
+    };
+    #[cfg(target_os = "macos")]
+    let result = unsafe { libc::renamex_np(from.as_ptr(), to.as_ptr(), libc::RENAME_EXCL) };
+    if result < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    sync_journal_directory(destination)
 }
 
 #[cfg(windows)]
@@ -2518,6 +2596,7 @@ impl Drop for JournalWriter {
 /// create a window for a second worker to append independently.
 struct JournalWriterOwnership {
     lock_handle: Option<File>,
+    #[cfg(windows)]
     lock_path: PathBuf,
 }
 
@@ -2539,11 +2618,11 @@ impl Drop for JournalWriterOwnership {
         // replacement wins the tiny close/remove race, its ownership handle
         // makes this remove fail harmlessly.
         self.lock_handle.take();
+        #[cfg(windows)]
         let _ = std::fs::remove_file(&self.lock_path);
     }
 }
 
-#[cfg(windows)]
 fn writer_lock_path(path: &Path) -> PathBuf {
     let mut lock: OsString = path.as_os_str().to_owned();
     lock.push(".writer.lock");
@@ -2791,13 +2870,16 @@ fn writer_owns_matching_manifest_authority(
     }
 }
 
-#[cfg(not(windows))]
-fn acquire_writer_ownership(_path: &Path) -> Result<JournalWriterOwnership, JournalError> {
-    // Do not fall back to an advisory or best-effort lock: that would let two
-    // workers concurrently append durable command evidence.  TownLight
-    // Station's worker product is Windows-only, and non-Windows builds remain
-    // compile-safe while failing closed at writer startup.
-    Err(JournalError::WriterOwnershipUnavailable)
+#[cfg(unix)]
+fn acquire_writer_ownership(path: &Path) -> Result<JournalWriterOwnership, JournalError> {
+    // All writers take the same kernel lock before touching the journal.
+    // Keep the sidecar inode across close/reopen so contenders cannot split
+    // ownership by acquiring locks on two different files.
+    let lock =
+        try_exclusive_sidecar(&writer_lock_path(path))?.ok_or(JournalError::WriterAlreadyActive)?;
+    Ok(JournalWriterOwnership {
+        lock_handle: Some(lock),
+    })
 }
 
 pub fn read_events(path: impl AsRef<Path>) -> Result<Vec<WorkerEventEnvelope>, JournalError> {
@@ -3012,6 +3094,8 @@ pub fn verify_incremental_reader_authority(
     cursor: &JournalCursor,
 ) -> Result<(), JournalError> {
     let root = path.as_ref();
+    #[cfg(unix)]
+    let lease = begin_incremental_reader_lease(root, true)?;
     #[cfg(windows)]
     let retained_binding = retained_manifest_authority_binding(root);
 
@@ -3056,6 +3140,12 @@ pub fn verify_incremental_reader_authority(
             cursor.byte_offset,
             "retained journal manifest authority changed before acknowledgement",
         ));
+    }
+    #[cfg(unix)]
+    if let Some(lease) = lease {
+        PROJECTION_LEASES.with_borrow_mut(|leases| {
+            leases.insert(root.to_owned(), lease._lease);
+        });
     }
     Ok(())
 }
@@ -5921,10 +6011,8 @@ fn replace_file(source: &Path, destination: &Path) -> std::io::Result<()> {
 
 #[cfg(not(windows))]
 fn replace_file(source: &Path, destination: &Path) -> std::io::Result<()> {
-    if destination.try_exists()? {
-        std::fs::remove_file(destination)?;
-    }
-    std::fs::rename(source, destination)
+    std::fs::rename(source, destination)?;
+    sync_journal_directory(destination)
 }
 
 /// Atomically replaces the manifest using the exact file object that was
@@ -6022,21 +6110,16 @@ fn replace_manifest_from_exact_handle(
     destination: &Path,
     expected_bytes: &[u8],
 ) -> Result<ManifestAuthorityHandle, JournalError> {
+    let identity = journal_file_identity(&file)?;
     replace_manifest_temp_at_promotion_boundary(temporary);
+    verify_manifest_path_matches_retained_handle(&file, temporary, expected_bytes, &identity)?;
     replace_file(temporary, destination).map_err(io_error)?;
-    if std::fs::read(destination).map_err(io_error)? != expected_bytes {
-        return Err(corrupt(
-            0,
-            "published journal generation manifest changed during promotion",
-        ));
-    }
-    let (authority, _) = open_manifest_authority_handle(
-        destination,
-        destination,
-        Some(&manifest_hash(expected_bytes)),
-        false,
-    )?;
-    Ok(authority)
+    verify_manifest_path_matches_retained_handle(&file, destination, expected_bytes, &identity)?;
+    Ok(ManifestAuthorityHandle {
+        file,
+        file_identity: identity,
+        manifest_hash: manifest_hash(expected_bytes),
+    })
 }
 
 fn read_exact_record(

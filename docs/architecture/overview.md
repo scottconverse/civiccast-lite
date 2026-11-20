@@ -16,6 +16,11 @@ credentials and keeps the control descriptor out of subsequent execs. The
 supervisor owns a separate Unix process group per worker and terminates the
 group before reaping the leader, preserving its identity through cleanup.
 
+Linux and macOS journal writers lock a persistent writer sidecar before recovery.
+Projection verification holds a shared lease through the storage transaction's
+acknowledgement on its owning thread. Generation promotion refuses an existing
+destination, and the publisher synchronizes the containing directory after rename.
+
 ```mermaid
 flowchart LR
   UI[Operator web UI] --> API[stationd]

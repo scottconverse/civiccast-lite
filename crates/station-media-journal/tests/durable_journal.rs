@@ -477,8 +477,11 @@ fn reopens_and_replays_an_immediately_previous_major_durable_event() {
 }
 
 #[test]
-fn durable_replay_rejects_older_and_future_protocol_majors_while_ipc_rejects_v8() {
-    for (label, major) in [("legacy-v9", 9_u16), ("future-v12", 12_u16)] {
+fn durable_replay_rejects_unsupported_majors_while_ipc_rejects_previous_major() {
+    for (label, major) in [
+        ("older", PROTOCOL_VERSION.major - 2),
+        ("future", PROTOCOL_VERSION.major + 1),
+    ] {
         let path = journal_path(label);
         let (_, frame) = persisted_event_frame(1, major);
         write_event_record(&path, &frame, 1);
@@ -496,9 +499,9 @@ fn durable_replay_rejects_older_and_future_protocol_majors_while_ipc_rejects_v8(
         let _ = std::fs::remove_file(path);
     }
 
-    let (_, v8_frame) = persisted_event_frame(1, PROTOCOL_VERSION.major - 1);
+    let (_, previous_frame) = persisted_event_frame(1, PROTOCOL_VERSION.major - 1);
     assert_eq!(
-        decode_event_frame(&v8_frame),
+        decode_event_frame(&previous_frame),
         Err(ProtocolError::UnsupportedMajor(PROTOCOL_VERSION.major - 1))
     );
 }
@@ -1062,4 +1065,30 @@ fn rejects_summary_output_endpoints_that_change_identity() {
         Err(JournalError::Corrupt { reason, .. }) if reason.contains("output endpoints")
     ));
     let _ = std::fs::remove_file(path);
+}
+
+#[cfg(unix)]
+#[test]
+fn unix_projection_holds_generation_until_durable_acknowledgement() {
+    use station_media_journal::{
+        acknowledge_incremental_reader, verify_incremental_reader_authority,
+    };
+    let directory = journal_path("unix-projection");
+    std::fs::create_dir(&directory).unwrap();
+    let path = directory.join("channel.tlj");
+    let mut writer = JournalWriter::open(&path, WORKER_ID, CHANNEL_ID).unwrap();
+    writer
+        .append(&event(1, WorkerEvent::Ready { graph_revision: 1 }))
+        .unwrap();
+    drop(writer);
+
+    let read = read_journal_incremental(&path, None, 1, true).unwrap();
+    verify_incremental_reader_authority(&path, &read.cursor).unwrap();
+    assert!(matches!(JournalWriter::open(&path, WORKER_ID, CHANNEL_ID),
+        Err(JournalError::Io(reason)) if reason.contains("reader is active")));
+    acknowledge_incremental_reader(&path);
+    let writer = JournalWriter::open(&path, WORKER_ID, CHANNEL_ID).unwrap();
+    assert_eq!(writer.next_sequence(), 2);
+    drop(writer);
+    std::fs::remove_dir_all(directory).unwrap();
 }
