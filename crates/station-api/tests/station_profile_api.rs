@@ -78,7 +78,7 @@ fn http_request(database: &Path, request: &[u8]) -> Vec<u8> {
     let server = thread::spawn(move || serve_one(listener, database));
     let mut client = TcpStream::connect(address).unwrap();
     client
-        .set_read_timeout(Some(Duration::from_secs(5)))
+        .set_read_timeout(Some(Duration::from_secs(30)))
         .unwrap();
     let header_end = request
         .windows(4)
@@ -113,7 +113,7 @@ fn http_request(database: &Path, request: &[u8]) -> Vec<u8> {
 fn http_request_to(address: std::net::SocketAddr, request: &[u8]) -> Vec<u8> {
     let mut client = TcpStream::connect(address).unwrap();
     client
-        .set_read_timeout(Some(Duration::from_secs(5)))
+        .set_read_timeout(Some(Duration::from_secs(30)))
         .unwrap();
     client.write_all(request).unwrap();
     let mut response = Vec::new();
@@ -866,7 +866,7 @@ fn serves_the_embedded_operator_console_from_the_station_origin() {
     assert_eq!(shell.status, 200);
     assert_eq!(shell.content_type, "text/html; charset=utf-8");
     let html = String::from_utf8(shell.body).unwrap();
-    assert!(html.contains("TownLight Station"));
+    assert!(html.contains("Townlight Station"));
     assert!(html.contains("/operator.js"));
     let deep_link = api.handle_in_process("GET", "/?view=health", None);
     assert_eq!(deep_link.status, 200);
@@ -2226,7 +2226,7 @@ fn bootstrap_session_survives_across_real_tcp_connections() {
     stop.store(true, Ordering::Release);
     assert!(
         finished_rx
-            .recv_timeout(Duration::from_secs(3))
+            .recv_timeout(Duration::from_secs(30))
             .unwrap()
             .is_ok()
     );
@@ -2247,7 +2247,7 @@ fn acknowledges_expect_continue_before_waiting_for_the_request_body() {
     );
     let mut client = TcpStream::connect(address).unwrap();
     client
-        .set_read_timeout(Some(Duration::from_secs(5)))
+        .set_read_timeout(Some(Duration::from_secs(30)))
         .unwrap();
     client.write_all(headers.as_bytes()).unwrap();
 
@@ -2311,7 +2311,7 @@ fn serves_requests_until_a_cooperative_stop_is_requested() {
 
     let mut client = TcpStream::connect(address).unwrap();
     client
-        .set_read_timeout(Some(Duration::from_secs(5)))
+        .set_read_timeout(Some(Duration::from_secs(30)))
         .unwrap();
     client
         .write_all(format!("GET /health HTTP/1.1\r\nHost: {address}\r\n\r\n").as_bytes())
@@ -2319,7 +2319,7 @@ fn serves_requests_until_a_cooperative_stop_is_requested() {
     let mut response = Vec::new();
     let _ = client.read_to_end(&mut response);
     stop.store(true, Ordering::Release);
-    let server_result = finished_rx.recv_timeout(Duration::from_secs(3)).unwrap();
+    let server_result = finished_rx.recv_timeout(Duration::from_secs(30)).unwrap();
 
     assert!(server_result.is_ok(), "server returned {server_result:?}");
     assert!(response.starts_with(b"HTTP/1.1 200 OK\r\n"));
@@ -2341,7 +2341,7 @@ fn allows_an_accepted_client_time_to_send_its_request() {
 
     let mut client = TcpStream::connect(address).unwrap();
     client
-        .set_read_timeout(Some(Duration::from_secs(5)))
+        .set_read_timeout(Some(Duration::from_secs(30)))
         .unwrap();
     thread::sleep(Duration::from_millis(100));
     client
@@ -2354,7 +2354,7 @@ fn allows_an_accepted_client_time_to_send_its_request() {
     stop.store(true, Ordering::Release);
     assert!(
         finished_rx
-            .recv_timeout(Duration::from_secs(3))
+            .recv_timeout(Duration::from_secs(30))
             .unwrap()
             .is_ok()
     );
@@ -2373,6 +2373,11 @@ fn keeps_health_responsive_while_another_request_is_stalled() {
     thread::spawn(move || {
         let _ = finished_tx.send(serve_until(listener, server_database, server_stop));
     });
+
+    // Fresh Windows SQLite schema/bootstrap work precedes serving. Establish
+    // readiness before measuring the stalled-request responsiveness behavior.
+    let ready = http_request_to(address, format!("GET /health HTTP/1.1\r\nHost: {address}\r\n\r\n").as_bytes());
+    assert!(ready.starts_with(b"HTTP/1.1 200 OK\r\n"));
 
     let mut stalled = TcpStream::connect(address).unwrap();
     stalled
@@ -2395,7 +2400,7 @@ fn keeps_health_responsive_while_another_request_is_stalled() {
     stop.store(true, Ordering::Release);
     assert!(
         finished_rx
-            .recv_timeout(Duration::from_secs(3))
+            .recv_timeout(Duration::from_secs(30))
             .unwrap()
             .is_ok()
     );

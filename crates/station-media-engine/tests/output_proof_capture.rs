@@ -35,6 +35,7 @@ fn post_mux_capture_is_bounded_decodable_and_does_not_interrupt_playout() {
         LoudnessTarget::CABLE.as_lufs()
     );
     let proof_root = root.join("output-proofs");
+    fs::create_dir_all(&proof_root).unwrap();
     let outputs = [
         ConfiguredTransportOutput::udp_identified(
             SINK_ID,
