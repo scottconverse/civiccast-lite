@@ -12,6 +12,8 @@ jobs:
   kernel:
     runs-on: windows-latest
     timeout-minutes: 60
+    env:
+      RUST_TEST_THREADS: "1"
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
