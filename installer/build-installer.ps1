@@ -32,7 +32,7 @@ if (-not [string]::IsNullOrWhiteSpace($env:RUSTUP_HOME) -or
 }
 
 $expectedGStreamerInstallerPath = Join-Path $trustedLocalAppData 'Temp\TownLightStation-Toolchain-20260820\gstreamer-1.0-msvc-x86_64-1.28.6.exe'
-$expectedCaptionDecoderArchivePath = Join-Path $trustedLocalAppData 'Temp\TownLightStation-Toolchain-20260825\ffmpeg-n9.0.1-6-g9d4ca21220-win64-lgpl-9.0.zip'
+$expectedCaptionDecoderArchivePath = Join-Path $trustedLocalAppData 'Temp\TownLightStation-Toolchain-20260831\ffmpeg-n9.0.1-11-ge47273f4d9-win64-lgpl-9.0.zip'
 $expectedTSDuckRuntimeArchivePath = Join-Path $trustedLocalAppData 'Temp\TownLightStation-Toolchain-20260826\TSDuck-Win64-3.44-4676-Portable.zip'
 $expectedInnoPath = Join-Path $trustedLocalAppData 'Programs\Inno Setup 6\ISCC.exe'
 if ([string]::IsNullOrWhiteSpace($GStreamerInstaller)) { $GStreamerInstaller = $expectedGStreamerInstallerPath }
@@ -41,12 +41,12 @@ if ([string]::IsNullOrWhiteSpace($TSDuckRuntimeArchive)) { $TSDuckRuntimeArchive
 if ([string]::IsNullOrWhiteSpace($InnoCompiler)) { $InnoCompiler = $expectedInnoPath }
 
 $expectedRuntimeHash = '059251444d1267b486eba390b18d25fed87e10315e72f757ec6c7e912fa746b5'
-$expectedCaptionDecoderArchiveHash = 'ccaa910db95451121482a5ebcb8c682123cb4f8a5bd5170fde4a814d7b437772'
-$expectedCaptionDecoderHash = 'b6b61f0d99c55e422bbd59fad6880a8d4f96d99a6c865f3bb58c8f1ce3ff7b31'
+$expectedCaptionDecoderArchiveHash = '2484854ad6988d34560f4e6ea7a6ecb9dde0af7c229d2591815d056b04ec4f56'
+$expectedCaptionDecoderHash = '63a0b3c76a245bc0d986853612d9ec43a2a2d1f1c7a3fa40ee459c248075b3a6'
 $expectedCaptionDecoderSize = 114400768
 $expectedCaptionDecoderLicenseHash = 'da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768'
 $expectedCaptionDecoderLicenseSize = 7651
-$captionDecoderArchiveRoot = 'ffmpeg-n9.0.1-6-g9d4ca21220-win64-lgpl-9.0'
+$captionDecoderArchiveRoot = 'ffmpeg-n9.0.1-11-ge47273f4d9-win64-lgpl-9.0'
 
 # Release builds use one explicit toolchain. Wrapper environment overrides are
 # accepted only when they resolve to these exact canonical paths.

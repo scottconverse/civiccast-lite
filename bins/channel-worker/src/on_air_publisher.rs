@@ -317,7 +317,7 @@ pub(super) fn run(kind: &str, path: &Path) -> Result<(), ()> {
                 && status_written.is_none_or(|t| t.elapsed() >= Duration::from_secs(3))
             {
                 // Health is advisory and must never interrupt output.
-                if fs::write(path.with_extension("progress"), []).is_ok() {
+                if fs::write(path.with_extension("progress"), observed.to_le_bytes()).is_ok() {
                     status_written = Some(Instant::now());
                 }
             }

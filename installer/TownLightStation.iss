@@ -750,6 +750,7 @@ begin
   Key := 'SYSTEM\CurrentControlSet\Services\' + StationServiceName;
   Environment :=
     'PATH=' + ExpandConstant('{app}\runtime\gstreamer\bin') + #0 +
+    'CIVICCAST_PORTAL_ROOT=' + ExpandConstant('{app}\public-portal') + #0 +
     'GST_PLUGIN_PATH_1_0=' +
       ExpandConstant('{app}\runtime\gstreamer\lib\gstreamer-1.0') + #0 +
     'GST_PLUGIN_SYSTEM_PATH_1_0=' +

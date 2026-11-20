@@ -420,8 +420,8 @@ fn accepts_a_typed_caption_cue_without_interrupting_transport() {
         .set_read_timeout(Some(Duration::from_secs(5)))
         .unwrap();
     let root = test_root("cea708-output-proof");
-    fs::create_dir_all(&root).unwrap();
     let proof_root = root.join("output-proofs");
+    fs::create_dir_all(&proof_root).unwrap();
     let sink_id = "7ef1430d-a35c-49f7-91f0-d03cc96bf4af";
     let mut playout =
         PersistentPlayout::start_configured_outputs_with_profile_roots_and_authorities(
@@ -495,7 +495,7 @@ fn clears_a_prequeued_caption_across_a_program_to_fallback_transition_without_st
     let source = root.join("incoming.ts");
     let library = root.join("library");
     let proof_root = root.join("output-proofs");
-    fs::create_dir_all(&root).unwrap();
+    fs::create_dir_all(&proof_root).unwrap();
     generate_fixture(&source, "smpte");
     let asset = ingest_media(&source, &library).expect("the real A/V file must ingest");
 

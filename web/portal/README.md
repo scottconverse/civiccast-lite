@@ -2,6 +2,8 @@
 
 Set `CIVICCAST_PORTAL_ROOT` in the station service environment to the absolute path of a dedicated website directory. Its parent must exist and the service account must have write access. Keep the site in a separate tree from the private station database, media library and service credentials.
 
+The Windows installer configures the service to write the site into the `public-portal` folder under the installation directory. The macOS launch daemon uses `/Library/WebServer/Documents/civiccast-lab`. Point your static web server at that directory.
+
 Start the station and enable a channel in the operator console. The service puts the player, its local HLS library and a public channel list in the site directory. Each running channel writes a rolling playlist and transport stream segments in its own channel-ID directory. The player uses the channel display name from the console.
 
 Serve this directory as a static HTTPS website on the station's web server. Use `index.html` as the default document. Serve `.m3u8` as `application/vnd.apple.mpegurl` and `.ts` as `video/mp2t`. Require revalidation for playlists and `channels.json`. Give the web server read access. Disable directory listings. The operator API and database belong on the private station network.
