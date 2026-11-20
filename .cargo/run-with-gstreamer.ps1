@@ -5,7 +5,7 @@ if ($args.Count -lt 1) {
 }
 
 $executable = [string]$args[0]
-$executableArguments = if ($args.Count -gt 1) { @($args[1..($args.Count - 1)]) } else { @() }
+[string[]]$executableArguments = @($args | Select-Object -Skip 1)
 $configuredRoot = [Environment]::GetEnvironmentVariable('TOWNLIGHT_GSTREAMER_ROOT')
 $runtimeRoot = if ([string]::IsNullOrWhiteSpace($configuredRoot)) {
     Join-Path $env:LOCALAPPDATA 'Programs\gstreamer\1.0\msvc_x86_64'

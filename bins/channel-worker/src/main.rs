@@ -18,8 +18,8 @@ use station_media_protocol::{
     WorkerBootstrapEnvelope, WorkerEvent, WorkerEventEnvelope, WorkerFallbackTone,
     WorkerOutputConfiguration, decode_bootstrap_frame, decode_command_frame, encode_event_frame,
 };
+use station_runtime::worker_transport::{IpcError, PipeStream};
 use station_schedule::OutputProfileId;
-use station_windows_ipc::{IpcError, PipeStream};
 
 struct WorkerArguments {
     worker_id: String,

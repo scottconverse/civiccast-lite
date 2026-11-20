@@ -4,6 +4,15 @@ Townlight Station is a Windows appliance with local authority. Internet services
 
 ## Runtime boundaries
 
+Console startup and Windows Service Control Manager startup both enter
+`start_channel_orchestration` in `stationd`. Windows retains its service status,
+stop handler, and orchestration failure receipt. The shared supervisor owns the
+versioned bootstrap and validates worker identity and event sequence. Its Windows
+transport in `crates/station-runtime/src/worker_transport_windows.rs` binds the
+protected local pipe, launches the contained child, and handles bounded cleanup.
+The worker uses the same transport module to connect. This boundary currently has
+a Windows implementation.
+
 ```mermaid
 flowchart LR
   UI[Operator web UI] --> API[stationd]

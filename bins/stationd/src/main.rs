@@ -253,32 +253,16 @@ fn run_console(config: DaemonConfig) -> Result<(), String> {
     initialize_database(&config.database)?;
     let source_evidence_authority =
         Arc::new(StationSourceEvidenceAuthority::new().map_err(|error| error.to_string())?);
-    let worker_executable = worker_executable()?;
     let update_application = application_directory()?;
     let api_application = update_application.clone();
-    let caption_decoder = caption_decoder_executable(&update_application);
-    let proof_candidate_authority =
-        installed_candidate_authority(&config.database, update_application.clone())?;
     let stop = Arc::new(AtomicBool::new(false));
     let orchestration_health = Arc::new(OrchestrationHealth::new(ORCHESTRATION_STALE_AFTER));
-    let orchestration_database = config.database.clone();
-    let orchestration = spawn_supervised_orchestration(
-        Arc::clone(&stop),
-        Arc::clone(&orchestration_health),
+    let orchestration = start_channel_orchestration(
+        &config.database,
+        &update_application,
+        &stop,
+        &orchestration_health,
         None,
-        move |orchestration_stop, health| {
-            let reconciled_health = Arc::clone(&health);
-            station_orchestration::run_until_with_proof_authorities_and_liveness(
-                &orchestration_database,
-                &worker_executable,
-                orchestration_stop,
-                Some(proof_candidate_authority),
-                Some(caption_decoder),
-                move || health.mark_alive(),
-                move || reconciled_health.mark_progress(),
-            )
-            .map_err(|error| format!("channel orchestration stopped: {error:?}"))
-        },
     )?;
     if let Err(startup_error) =
         wait_for_orchestration_ready(&orchestration_health, &stop, ORCHESTRATION_STARTUP_TIMEOUT)
@@ -486,31 +470,14 @@ fn run_service(config: DaemonConfig) -> Result<(), String> {
     initialize_database(&config.database)?;
     let source_evidence_authority =
         Arc::new(StationSourceEvidenceAuthority::new().map_err(|error| error.to_string())?);
-    let worker_executable = worker_executable()?;
     let update_application = application_directory()?;
     let api_application = update_application.clone();
-    let caption_decoder = caption_decoder_executable(&update_application);
-    let proof_candidate_authority =
-        installed_candidate_authority(&config.database, update_application.clone())?;
-    let orchestration_database = config.database.clone();
-    let orchestration_receipt = config.database.with_file_name("orchestration-error.txt");
-    let orchestration = spawn_supervised_orchestration(
-        Arc::clone(&stop),
-        Arc::clone(&orchestration_health),
-        Some(orchestration_receipt),
-        move |orchestration_stop, health| {
-            let reconciled_health = Arc::clone(&health);
-            station_orchestration::run_until_with_proof_authorities_and_liveness(
-                &orchestration_database,
-                &worker_executable,
-                orchestration_stop,
-                Some(proof_candidate_authority),
-                Some(caption_decoder),
-                move || health.mark_alive(),
-                move || reconciled_health.mark_progress(),
-            )
-            .map_err(|error| format!("channel orchestration stopped: {error:?}"))
-        },
+    let orchestration = start_channel_orchestration(
+        &config.database,
+        &update_application,
+        &stop,
+        &orchestration_health,
+        Some(config.database.with_file_name("orchestration-error.txt")),
     )?;
     if let Err(startup_error) =
         wait_for_orchestration_ready(&orchestration_health, &stop, ORCHESTRATION_STARTUP_TIMEOUT)
@@ -759,10 +726,42 @@ fn run_service(config: DaemonConfig) -> Result<(), String> {
     result
 }
 
+fn start_channel_orchestration(
+    database: &Path,
+    application_root: &Path,
+    stop: &Arc<AtomicBool>,
+    health: &Arc<OrchestrationHealth>,
+    receipt: Option<PathBuf>,
+) -> Result<std::thread::JoinHandle<Result<(), String>>, String> {
+    let worker_executable = worker_executable()?;
+    let caption_decoder = caption_decoder_executable(application_root);
+    let proof_candidate_authority =
+        installed_candidate_authority(database, application_root.to_owned())?;
+    let orchestration_database = database.to_owned();
+    spawn_supervised_orchestration(
+        Arc::clone(stop),
+        Arc::clone(health),
+        receipt,
+        move |orchestration_stop, health| {
+            let reconciled_health = Arc::clone(&health);
+            station_orchestration::run_until_with_proof_authorities_and_liveness(
+                &orchestration_database,
+                &worker_executable,
+                orchestration_stop,
+                Some(proof_candidate_authority),
+                Some(caption_decoder),
+                move || health.mark_alive(),
+                move || reconciled_health.mark_progress(),
+            )
+            .map_err(|error| format!("channel orchestration stopped: {error:?}"))
+        },
+    )
+}
+
 fn worker_executable() -> Result<std::path::PathBuf, String> {
     let executable = std::env::current_exe()
         .map_err(|error| format!("could not locate stationd: {error}"))?
-        .with_file_name("channel-worker.exe");
+        .with_file_name(format!("channel-worker{}", std::env::consts::EXE_SUFFIX));
     if executable.is_file() {
         Ok(executable)
     } else {
@@ -783,7 +782,7 @@ fn caption_decoder_executable(application_root: &Path) -> PathBuf {
     application_root
         .join("runtime")
         .join("caption-decoder")
-        .join("ffmpeg.exe")
+        .join(format!("ffmpeg{}", std::env::consts::EXE_SUFFIX))
 }
 
 fn installed_candidate_authority(

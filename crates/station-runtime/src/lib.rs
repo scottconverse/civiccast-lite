@@ -1,7 +1,6 @@
 use std::collections::VecDeque;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use station_media_protocol::{
@@ -11,12 +10,14 @@ use station_media_protocol::{
     encode_command_frame,
 };
 use station_schedule::OutputProfileId;
-use station_windows_ipc::{
-    ContainedProcess, IpcError, PipeServer, PipeStream, ProcessContainment,
-    launch_contained_process,
-};
+#[cfg(windows)]
+#[path = "worker_transport_windows.rs"]
+pub mod worker_transport;
 
-static PIPE_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+use worker_transport::{
+    ContainedProcess, IpcError, PipeStream, ProcessContainment, abandon_launch,
+    request_termination, terminate_bounded,
+};
 const FORCE_TERMINATE_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_PENDING_LIFECYCLE_EVENTS: usize = 64;
 
@@ -306,29 +307,14 @@ impl WorkerSupervisor {
         let bootstrap_frame =
             encode_bootstrap_frame(&bootstrap).map_err(SupervisorError::Protocol)?;
         let started = Instant::now();
-        let suffix = format!(
-            "worker-{}-{}",
-            std::process::id(),
-            PIPE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
-        );
-        let server = PipeServer::bind(&suffix).map_err(SupervisorError::Ipc)?;
-        let journal_path = journal_path.to_string_lossy();
-        let (child, containment) = launch_contained_process(
+        let (child, containment, mut pipe) = worker_transport::connect_child(
             executable,
-            &[worker_id, channel_id, &journal_path, server.name()],
-        )
-        .map_err(SupervisorError::Ipc)?;
-
-        let mut pipe = match server.accept_timeout(timeout.saturating_sub(started.elapsed())) {
-            Ok(pipe) => pipe,
-            Err(error) => {
-                return Err(abandon_launch(
-                    child,
-                    containment,
-                    SupervisorError::Ipc(error),
-                ));
-            }
-        };
+            worker_id,
+            channel_id,
+            journal_path,
+            started,
+            timeout,
+        )?;
         if let Err(error) =
             pipe.write_all_timeout(&bootstrap_frame, timeout.saturating_sub(started.elapsed()))
         {
@@ -748,59 +734,6 @@ fn wait_for_exit(child: &ContainedProcess, timeout: Duration) -> Result<u32, Sup
     }
 }
 
-fn abandon_launch(
-    child: ContainedProcess,
-    containment: ProcessContainment,
-    error: SupervisorError,
-) -> SupervisorError {
-    // Releasing the kill-on-close job is a bounded kernel request. The direct handle is
-    // then dropped without waiting, so every failed launch path returns even
-    // if Windows is slow to report process exit.
-    drop(containment);
-    drop(child);
-    error
-}
-
-fn request_termination(child: &ContainedProcess) -> Result<(), SupervisorError> {
-    child.terminate().map_err(SupervisorError::Ipc)
-}
-
-fn terminate_bounded(
-    child: &ContainedProcess,
-    containment: Option<ProcessContainment>,
-    timeout: Duration,
-) -> Result<(), SupervisorError> {
-    // Close containment first. This covers descendants that direct termination
-    // cannot reach and removes the need for an unbounded detached reaper.
-    let job_close_requested_termination = containment.is_some();
-    drop(containment);
-    match child.try_wait().map_err(SupervisorError::Ipc)? {
-        Some(_) => return Ok(()),
-        None => match request_termination(child) {
-            Ok(()) => {}
-            // Closing a job may already have placed its direct process into
-            // termination before the immediate zero-time wait observes the
-            // signaled state. The owned process handle cannot otherwise be
-            // access-denied, so continue the bounded observation in this one
-            // proven-contained case.
-            Err(SupervisorError::Ipc(IpcError::Os { code: 5, .. }))
-                if job_close_requested_termination => {}
-            Err(error) => return Err(error),
-        },
-    }
-
-    let started = Instant::now();
-    loop {
-        if child.try_wait().map_err(SupervisorError::Ipc)?.is_some() {
-            return Ok(());
-        }
-        if started.elapsed() >= timeout {
-            return Err(SupervisorError::ProcessExitTimedOut);
-        }
-        std::thread::sleep(Duration::from_millis(2));
-    }
-}
-
 fn io_error(operation: &'static str, error: std::io::Error) -> SupervisorError {
     SupervisorError::Io {
         operation,
@@ -811,6 +744,8 @@ fn io_error(operation: &'static str, error: std::io::Error) -> SupervisorError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    use station_windows_ipc::{PipeServer, launch_contained_process};
     #[cfg(windows)]
     use std::fs;
     #[cfg(windows)]

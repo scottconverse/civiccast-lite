@@ -16,15 +16,15 @@ station-media-protocol.workspace = true
 station-orchestration.workspace = true
 station-schedule.workspace = true
 station-storage.workspace = true
-station-windows-ipc.workspace = true
+station-runtime.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
+station-windows-ipc.workspace = true
 station-captions.workspace = true
 station-domain.workspace = true
 station-live.workspace = true
 station-media-assets.workspace = true
 station-media-journal.workspace = true
-station-runtime.workspace = true
 station-media-protocol.workspace = true
 station-readiness.workspace = true

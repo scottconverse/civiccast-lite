@@ -146,6 +146,11 @@ try {
     # Otherwise the environment propagation probe would deploy its one-byte fake
     # DLLs into this checkout's real target directory.
     $env:CARGO_TARGET_DIR = $targetRoot
+    # Cargo sends a single test-name filter as one native argument.
+    $shellPaths = @(& $runnerPath "$env:SystemRoot\System32\where.exe" powershell.exe)
+    if ($LASTEXITCODE -ne 0 -or (Get-Command powershell.exe).Source -notin $shellPaths) {
+        throw 'The Cargo runner split or lost its single native argument.'
+    }
     & $runnerPath (Get-Command pwsh.exe -ErrorAction Stop).Source -NoProfile -NonInteractive `
         -File $probe $bin $plugins
     if ($LASTEXITCODE -ne 0) {
