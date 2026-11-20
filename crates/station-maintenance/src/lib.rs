@@ -81,6 +81,8 @@ const REQUIRED_TSDUCK_RUNTIME_FILES: [&str; 7] = [
     "bin/tscore.dll",
 ];
 const INSTALL_AUTHORITY_FENCE_TIMEOUT: Duration = Duration::from_secs(30);
+// 30s fence acquisition wait + 35s graceful shutdown budget + margin.
+const STATION_STOP_TIMEOUT: Duration = Duration::from_secs(75);
 // MUTEX_ALL_ACCESS after Windows applies the kernel object's generic mapping.
 #[cfg(windows)]
 const INSTALL_AUTHORITY_FENCE_SDDL: &str = "D:P(A;;0x1f0001;;;SY)(A;;0x1f0001;;;BA)";
@@ -935,7 +937,7 @@ pub fn activate_prepared_slot(
     write_transaction(&transaction_path, &transaction)?;
 
     let activation_result = (|| {
-        host.stop_station(Duration::from_secs(30))?;
+        host.stop_station(STATION_STOP_TIMEOUT)?;
         advance(
             &transaction_path,
             &mut transaction,
@@ -998,7 +1000,7 @@ pub fn activate_prepared_slot(
         // The first proof runs the candidate against the old receipts. Stop it
         // again before changing candidate authority so no running stationd can
         // append evidence across the receipt-generation boundary.
-        host.stop_station(Duration::from_secs(30))?;
+        host.stop_station(STATION_STOP_TIMEOUT)?;
         advance(
             &transaction_path,
             &mut transaction,
@@ -1767,7 +1769,7 @@ fn rollback(
         &format!("Candidate failed proof; rollback started: {activation_error}"),
     )?;
     let result = (|| {
-        host.stop_station(Duration::from_secs(30))?;
+        host.stop_station(STATION_STOP_TIMEOUT)?;
         let previous_directory = transaction
             .previous_receipt
             .active
@@ -1892,7 +1894,7 @@ pub fn recover_incomplete_transaction(
         "Interrupted maintenance transaction detected; conservative rollback started.",
     )?;
     let recovery = (|| {
-        host.stop_station(Duration::from_secs(30))?;
+        host.stop_station(STATION_STOP_TIMEOUT)?;
         let previous_directory = transaction
             .previous_receipt
             .active

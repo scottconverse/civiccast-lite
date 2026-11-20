@@ -2298,6 +2298,7 @@ name = "station-updater"
 version = "0.1.0"
 dependencies = [
  "serde_json",
+ "station-domain",
  "station-maintenance",
  "station-storage",
  "ureq",

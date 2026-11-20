@@ -1,6 +1,7 @@
 mod config;
 
 use config::{LaunchMode, UpdaterConfig};
+use station_domain::{AlertEventState, AlertSeverity, SafeToAirColor, derive_runtime_safe_to_air};
 use station_maintenance::{
     ActiveApplication, MaintenanceHost, MaintenancePhase, archive_completed_request,
     pending_request_paths, process_maintenance_request,
@@ -155,7 +156,8 @@ fn process_once(config: &UpdaterConfig) -> Result<bool, String> {
     let Some(request_path) = pending_request_paths(data_directory)?.into_iter().next() else {
         return Ok(false);
     };
-    let mut host = WindowsMaintenanceHost::new(config.application_root.clone());
+    let mut host =
+        WindowsMaintenanceHost::new(config.application_root.clone(), config.database.clone());
     let result = process_maintenance_request(
         &request_path,
         &config.database,
@@ -181,13 +183,15 @@ fn process_once(config: &UpdaterConfig) -> Result<bool, String> {
 struct WindowsMaintenanceHost {
     application_root: PathBuf,
     configured_stationd: Option<PathBuf>,
+    database_path: PathBuf,
 }
 
 impl WindowsMaintenanceHost {
-    fn new(application_root: PathBuf) -> Self {
+    fn new(application_root: PathBuf, database_path: PathBuf) -> Self {
         Self {
             application_root,
             configured_stationd: None,
+            database_path,
         }
     }
 }
@@ -285,6 +289,8 @@ impl MaintenanceHost for WindowsMaintenanceHost {
             )
             .build()
             .new_agent();
+        let store = station_storage::StationStore::open(&self.database_path)
+            .map_err(|error| format!("could not open candidate station database: {error}"))?;
         let deadline = Instant::now() + timeout;
         let mut last_error = "candidate did not reach running state".to_string();
         while Instant::now() < deadline {
@@ -301,10 +307,12 @@ impl MaintenanceHost for WindowsMaintenanceHost {
                         Err("running station process is not the configured candidate".into())
                     }
                 }) {
-                    Ok(()) => match probe_http(&agent) {
-                        Ok(()) => return Ok(()),
-                        Err(error) => last_error = error,
-                    },
+                    Ok(()) => {
+                        match probe_http(&agent).and_then(|()| probe_local_safe_to_air(&store)) {
+                            Ok(()) => return Ok(()),
+                            Err(error) => last_error = error,
+                        }
+                    }
                     Err(error) => last_error = error,
                 }
             }
@@ -319,12 +327,40 @@ fn probe_http(agent: &Agent) -> Result<(), String> {
     if health["status"] != "ready" || health["database"] != "ready" {
         return Err("candidate health response was not ready".into());
     }
-    let runtime = read_json(
-        agent,
-        "http://127.0.0.1:4070/api/v1/runtime-safe-to-air",
-        "candidate runtime proof",
-    )?;
-    if runtime["color"] != "green" {
+    Ok(())
+}
+
+fn probe_local_safe_to_air(store: &station_storage::StationStore) -> Result<(), String> {
+    let now = system_time_millis()?;
+    let channels = store
+        .list_channels()
+        .map_err(|error| format!("could not read candidate channels: {error}"))?;
+    let mut runtime_channels = Vec::new();
+    for channel in channels.into_iter().filter(|channel| channel.enabled) {
+        let observation = store
+            .read_channel_runtime(&channel.channel_id)
+            .map_err(|error| format!("could not read candidate channel runtime: {error}"))?;
+        runtime_channels.push((channel.channel_id, channel.display_name, observation));
+    }
+    let alerts = store
+        .list_alert_events()
+        .map_err(|error| format!("could not read candidate alert events: {error}"))?;
+    let active_critical = alerts
+        .iter()
+        .filter(|event| {
+            event.state == AlertEventState::Firing && event.severity == AlertSeverity::Critical
+        })
+        .count();
+    let active_warning = alerts
+        .iter()
+        .filter(|event| {
+            event.state == AlertEventState::Firing && event.severity == AlertSeverity::Warning
+        })
+        .count();
+    let status =
+        derive_runtime_safe_to_air(now, &runtime_channels, active_critical, active_warning)
+            .map_err(|message| format!("candidate runtime state was invalid: {message}"))?;
+    if status.color != SafeToAirColor::Green {
         return Err("candidate runtime did not recover to safe-to-air green".into());
     }
     Ok(())
