@@ -29,10 +29,20 @@ jobs:
         shell: pwsh
         run: |
           $installer = Join-Path $env:RUNNER_TEMP 'gstreamer.exe'
-          Invoke-WebRequest 'https://gstreamer.freedesktop.org/data/pkg/windows/1.28.6/msvc/gstreamer-1.0-msvc-x86_64-1.28.6.exe' -OutFile $installer
+          Write-Host 'Downloading pinned GStreamer SDK (bounded to five minutes).'
+          curl.exe --fail --location --retry 2 --max-time 300 --output $installer 'https://gstreamer.freedesktop.org/data/pkg/windows/1.28.6/msvc/gstreamer-1.0-msvc-x86_64-1.28.6.exe'
+          if ($LASTEXITCODE -ne 0) { throw 'GStreamer SDK download failed.' }
           if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant() -ne '059251444d1267b486eba390b18d25fed87e10315e72f757ec6c7e912fa746b5') { throw 'GStreamer hash mismatch.' }
           $destination = Join-Path $env:RUNNER_TEMP 'gstreamer'
-          $process = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT','/NORESTART',('/DIR="' + $destination + '"')) -WindowStyle Hidden -Wait -PassThru
+          Write-Host 'Installing development SDK without optional registration or redistributable tasks.'
+          $log = Join-Path $env:RUNNER_TEMP 'gstreamer-install.log'
+          $process = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/SP-','/ALLUSERS','/NORESTART','/TYPE=devel','/TASKS=""',('/LOG="' + $log + '"'),('/DIR="' + $destination + '"')) -WindowStyle Hidden -PassThru
+          if (-not $process.WaitForExit(600000)) {
+            Stop-Process -Id $process.Id -Force
+            if (Test-Path $log) { Get-Content $log -Tail 30 }
+            throw 'GStreamer SDK installation exceeded ten minutes.'
+          }
+          $process.Refresh()
           if ($process.ExitCode -ne 0) { throw "GStreamer install failed: $($process.ExitCode)" }
       - name: Configure native build dependencies
         shell: pwsh
@@ -47,3 +57,10 @@ jobs:
       - name: Test complete Rust workspace through required safe launcher
         shell: powershell
         run: ./scripts/invoke-cargo.ps1 test --workspace --locked
+      - name: Preserve native dependency setup log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-kernel-native-setup
+          path: ${{ runner.temp }}/gstreamer-install.log
+          retention-days: 7
