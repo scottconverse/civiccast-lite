@@ -29,7 +29,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Cache pinned GStreamer toolchain
         id: gst-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/gstreamer
           key: windows-gstreamer-msvc-full-1.28.6
