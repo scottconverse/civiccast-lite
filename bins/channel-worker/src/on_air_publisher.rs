@@ -212,6 +212,10 @@ pub(super) fn run(kind: &str, path: &Path) -> Result<(), ()> {
         .map_err(|_| ())?;
     let sink = pipeline.by_name("sink").ok_or(())?;
     let mut generation = String::new();
+    let source_playlist = path.join(".publisher.m3u8");
+    let mut sequence_base = 0;
+    let mut discontinuities = 0u64;
+    let mut previous = String::new();
     let playlist = path.join("live.m3u8");
     if kind == "hls" {
         if !path.is_absolute() {
@@ -230,7 +234,27 @@ pub(super) fn run(kind: &str, path: &Path) -> Result<(), ()> {
                 .to_str()
                 .ok_or(())?,
         );
-        sink.set_property("playlist-location", playlist.to_str().ok_or(())?);
+        sequence_base = fs::read_to_string(&playlist)
+            .ok()
+            .and_then(|s| {
+                discontinuities = s
+                    .lines()
+                    .find_map(|line| {
+                        line.strip_prefix("#EXT-X-DISCONTINUITY-SEQUENCE:")?
+                            .parse::<u64>()
+                            .ok()
+                    })
+                    .unwrap_or(0)
+                    .saturating_add(
+                        s.lines()
+                            .filter(|line| *line == "#EXT-X-DISCONTINUITY")
+                            .count() as u64,
+                    );
+                let first = media_sequence(&s)?;
+                first.checked_add(s.lines().filter(|line| line.ends_with(".ts")).count() as u64)
+            })
+            .unwrap_or(0);
+        sink.set_property("playlist-location", source_playlist.to_str().ok_or(())?);
     } else {
         let mut sealed = Vec::new();
         fs::File::open(path)
@@ -264,6 +288,15 @@ pub(super) fn run(kind: &str, path: &Path) -> Result<(), ()> {
             };
         }
         let observed = if kind == "hls" {
+            if let Ok(raw) = fs::read_to_string(&source_playlist) {
+                if raw != previous && raw.contains(&generation) {
+                    if let Ok(()) =
+                        publish_playlist(&playlist, &raw, sequence_base, discontinuities)
+                    {
+                        previous = raw;
+                    }
+                }
+            }
             fs::metadata(&playlist)
                 .and_then(|m| m.modified())
                 .ok()
@@ -323,5 +356,70 @@ fn prune_old_segments(dir: &Path, generation: &str) {
         {
             let _ = fs::remove_file(entry.path());
         }
+    }
+}
+
+fn media_sequence(raw: &str) -> Option<u64> {
+    raw.lines()
+        .find_map(|line| line.strip_prefix("#EXT-X-MEDIA-SEQUENCE:")?.parse().ok())
+}
+
+fn publish_playlist(
+    path: &Path,
+    raw: &str,
+    base: u64,
+    discontinuities: u64,
+) -> std::io::Result<()> {
+    let first = media_sequence(raw).ok_or(std::io::ErrorKind::InvalidData)?;
+    let sequence = base
+        .checked_add(first)
+        .ok_or(std::io::ErrorKind::InvalidData)?;
+    let mut file =
+        tempfile::NamedTempFile::new_in(path.parent().ok_or(std::io::ErrorKind::InvalidInput)?)?;
+    let mut boundary = base > 0 && first == 0;
+    for line in raw.lines() {
+        if line.starts_with("#EXT-X-MEDIA-SEQUENCE:") {
+            writeln!(file, "#EXT-X-MEDIA-SEQUENCE:{sequence}")?;
+            let removed_boundary = u64::from(base > 0 && first > 0);
+            writeln!(
+                file,
+                "#EXT-X-DISCONTINUITY-SEQUENCE:{}",
+                discontinuities.saturating_add(removed_boundary)
+            )?;
+        } else {
+            if boundary && line.starts_with("#EXTINF:") {
+                writeln!(file, "#EXT-X-DISCONTINUITY")?;
+                boundary = false;
+            }
+            writeln!(file, "{line}")?;
+        }
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        file.as_file()
+            .set_permissions(fs::Permissions::from_mode(0o644))?;
+    }
+    file.persist(path)?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod playlist_tests {
+    use super::*;
+
+    #[test]
+    fn restart_preserves_sequence_and_moves_discontinuity_out_of_window() {
+        let directory = tempfile::tempdir().unwrap();
+        let playlist = directory.path().join("live.m3u8");
+        let raw = "#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:2,\nseg-a.ts\n";
+        publish_playlist(&playlist, raw, 18, 2).unwrap();
+        let first = fs::read_to_string(&playlist).unwrap();
+        assert_eq!(media_sequence(&first), Some(18));
+        assert!(first.contains("#EXT-X-DISCONTINUITY-SEQUENCE:2\n#EXT-X-DISCONTINUITY\n#EXTINF"));
+        publish_playlist(&playlist, &raw.replace("SEQUENCE:0", "SEQUENCE:1"), 18, 2).unwrap();
+        let next = fs::read_to_string(&playlist).unwrap();
+        assert_eq!(media_sequence(&next), Some(19));
+        assert!(next.contains("#EXT-X-DISCONTINUITY-SEQUENCE:3\n#EXTINF"));
     }
 }

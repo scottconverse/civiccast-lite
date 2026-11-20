@@ -5,6 +5,7 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
+tempfile = "=3.27.0"
 station-secrets.workspace = true
 station-publishing.workspace = true
 getrandom.workspace = true
@@ -35,4 +36,3 @@ station-windows-ipc.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "=1.1.4", features = ["fs"] }
-tempfile = "=3.27.0"
