@@ -3,9 +3,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 extern crate self as station_storage;
 
 mod agenda_authority;
-mod distribution;
 mod automation_execution_authority;
 mod automation_summary_authority;
+mod distribution;
 pub use agenda_authority::{AgendaHistoryEntry, AgendaWriteError};
 #[cfg(all(test, windows))]
 mod automation_execution_authority_tests;

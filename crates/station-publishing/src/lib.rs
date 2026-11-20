@@ -746,3 +746,20 @@ pub fn portal_root(data: &std::path::Path) -> Result<Option<std::path::PathBuf>,
     }
     Ok(Some(root))
 }
+
+/// YouTube's primary and backup ingest URLs can address the same program.
+pub fn same_on_air_destination(left: &str, right: &str) -> bool {
+    let (Ok(left), Ok(right)) = (url::Url::parse(left), url::Url::parse(right)) else {
+        return false;
+    };
+    let youtube = |u: &url::Url| {
+        u.host_str().is_some_and(|host| {
+            host.eq_ignore_ascii_case("a.rtmp.youtube.com")
+                || host.eq_ignore_ascii_case("b.rtmp.youtube.com")
+        })
+    };
+    if youtube(&left) && youtube(&right) {
+        return left.path().trim_end_matches('/') == right.path().trim_end_matches('/');
+    }
+    left == right
+}

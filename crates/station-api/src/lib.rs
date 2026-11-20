@@ -7993,7 +7993,16 @@ impl Api {
             }
         }
         match self.storage.on_air_rtmp_configured(channel) {
-            Ok(configured) => json_response(200,serde_json::to_vec(&serde_json::json!({"channel_id":channel,"rtmp_configured":configured})).expect("serializable status")),
+            Ok(configured) => {
+                let (rtmp, portal) = match self.storage.distribution_progress(channel) {
+                    Ok(progress) => progress,
+                    Err(error) => return error_response(400, "distribution_read_failed", &error),
+                };
+                json_response(200,serde_json::to_vec(&serde_json::json!({
+                    "channel_id":channel,"rtmp_configured":configured,
+                    "rtmp_last_progress_unix":rtmp, "portal_last_progress_unix":portal
+                })).expect("serializable status"))
+            }
             Err(e) => error_response(400,"distribution_read_failed",&e),
         }
     }

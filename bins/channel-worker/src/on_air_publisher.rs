@@ -276,6 +276,7 @@ pub(super) fn run(kind: &str, path: &Path) -> Result<(), ()> {
     let mut progress = Instant::now();
     let mut last = 0u64;
     let mut cleanup = Instant::now();
+    let mut status_written: Option<Instant> = None;
     let result = loop {
         if let Some(msg) = bus.timed_pop_filtered(
             gst::ClockTime::SECOND,
@@ -311,6 +312,15 @@ pub(super) fn run(kind: &str, path: &Path) -> Result<(), ()> {
         if observed != last {
             progress = Instant::now();
             last = observed;
+            if kind == "rtmp"
+                && observed > 0
+                && status_written.is_none_or(|t| t.elapsed() >= Duration::from_secs(3))
+            {
+                // Health is advisory and must never interrupt output.
+                if fs::write(path.with_extension("progress"), []).is_ok() {
+                    status_written = Some(Instant::now());
+                }
+            }
         }
         if progress.elapsed() > Duration::from_secs(30) {
             break Err(());
