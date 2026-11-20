@@ -49,8 +49,8 @@ jobs:
         run: |
           $root = Join-Path $env:RUNNER_TEMP 'gstreamer'
           if (-not (Test-Path "$root/include/gstreamer-1.0/gst/gst.h")) { throw 'GStreamer development headers missing.' }
-          choco install pkgconfiglite --no-progress -y
-          if ($LASTEXITCODE -ne 0) { throw 'pkg-config installation failed.' }
+          choco install pkgconfiglite ffmpeg --no-progress -y
+          if ($LASTEXITCODE -ne 0) { throw 'Native test tools installation failed.' }
           "TOWNLIGHT_GSTREAMER_ROOT=$root" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "PKG_CONFIG_PATH=$root/lib/pkgconfig" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "LIB=$root/lib;$env:LIB" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
