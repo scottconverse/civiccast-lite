@@ -33,4 +33,9 @@ if ! test -e "$base/credentials/station-master.key"; then
     rm "$key"
     trap - EXIT
 fi
+if ! test -e "$base/state/station.db"; then
+    sudo -u "$account" env CIVICCAST_CREDENTIAL_DIRECTORY="$base/credentials" \
+        "$base/app/bin/stationd" auth issue-bootstrap-handoff \
+        --database "$base/state/station.db" --handoff "$base/state/operator-bootstrap.capability"
+fi
 launchctl bootstrap system /Library/LaunchDaemons/org.civiccast.lab.plist
