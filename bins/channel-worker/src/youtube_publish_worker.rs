@@ -3,8 +3,11 @@
 //! process boundary: no stream key ever travels in an argument, environment,
 //! log, or diagnostic string.
 
-use std::fs::{File, OpenOptions};
+use std::fs::File;
+#[cfg(windows)]
+use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom, Write};
+#[cfg(windows)]
 use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,8 +29,11 @@ const PIPELINE_STALL_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_EXPECTED_DURATION_MS: u64 = 24 * 60 * 60 * 1_000;
 const MAX_PIPELINE_RUNTIME: Duration = Duration::from_secs(24 * 60 * 60);
 const PIPELINE_RUNTIME_GRACE: Duration = Duration::from_secs(10 * 60);
+#[cfg(windows)]
 const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+#[cfg(windows)]
 const FILE_SHARE_READ: u32 = 0x0000_0001;
+#[cfg(windows)]
 const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
 const YOUTUBE_RTMPS_INGESTION_ADDRESS: &str = "rtmps://a.rtmp.youtube.com:443/live2";
 
@@ -252,6 +258,48 @@ fn open_input_media(managed_root: &str, path: &str) -> Result<(File, Vec<File>),
     {
         return Err("media_path_escape");
     }
+    open_relative_media(managed_root, relative)
+}
+
+#[cfg(unix)]
+fn open_relative_media(
+    root: &std::path::Path,
+    relative: &std::path::Path,
+) -> Result<(File, Vec<File>), &'static str> {
+    use rustix::fs::{Mode, OFlags, open, openat};
+    let dir_flags = OFlags::RDONLY | OFlags::CLOEXEC | OFlags::DIRECTORY | OFlags::NOFOLLOW;
+    let mut dir =
+        open(root, dir_flags, Mode::empty()).map_err(|_| "managed_media_root_unavailable")?;
+    for component in relative
+        .parent()
+        .into_iter()
+        .flat_map(std::path::Path::components)
+    {
+        dir = openat(&dir, component.as_os_str(), dir_flags, Mode::empty())
+            .map_err(|_| "managed_media_root_unavailable")?;
+    }
+    let name = relative.file_name().ok_or("invalid_media_path")?;
+    let fd = openat(
+        &dir,
+        name,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(|_| "media_open_failed")?;
+    let file = File::from(fd);
+    if !file.metadata().map_err(|_| "media_open_failed")?.is_file() {
+        return Err("invalid_media_path");
+    }
+    Ok((file, Vec::new()))
+}
+
+#[cfg(windows)]
+fn open_relative_media(
+    managed_root: &std::path::Path,
+    relative: &std::path::Path,
+) -> Result<(File, Vec<File>), &'static str> {
+    let input_path = managed_root.join(relative);
+    let path = input_path.as_path();
     let mut pins = Vec::new();
     let mut directory = managed_root.to_path_buf();
     pins.push(open_directory_no_follow(&directory)?);
@@ -278,6 +326,7 @@ fn open_input_media(managed_root: &str, path: &str) -> Result<(File, Vec<File>),
     Ok((media, pins))
 }
 
+#[cfg(windows)]
 fn open_directory_no_follow(path: &std::path::Path) -> Result<File, &'static str> {
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
     let directory = OpenOptions::new()
@@ -300,6 +349,11 @@ fn media_identity(media: &mut File) -> Result<MediaIdentity, &'static str> {
     media
         .seek(SeekFrom::Start(0))
         .map_err(|_| "media_read_failed")?;
+    // Unix allows other writers to modify an already-open inode. Publish
+    // from the private snapshot whose bytes were hashed, even after a rename
+    // or an in-place edit of the source. Windows denies writers while open.
+    #[cfg(unix)]
+    let mut snapshot = tempfile::tempfile().map_err(|_| "media_snapshot_failed")?;
     let mut hash = Sha256::new();
     let mut bytes_read = 0_u64;
     let mut buffer = [0_u8; APP_SOURCE_CHUNK_BYTES];
@@ -311,10 +365,21 @@ fn media_identity(media: &mut File) -> Result<MediaIdentity, &'static str> {
         bytes_read = bytes_read
             .checked_add(read as u64)
             .ok_or("media_read_failed")?;
+        if bytes_read > expected_length {
+            return Err("media_changed_during_read");
+        }
+        #[cfg(unix)]
+        snapshot
+            .write_all(&buffer[..read])
+            .map_err(|_| "media_snapshot_failed")?;
         hash.update(&buffer[..read]);
     }
     if bytes_read != expected_length {
         return Err("media_changed_during_read");
+    }
+    #[cfg(unix)]
+    {
+        *media = snapshot;
     }
     media
         .seek(SeekFrom::Start(0))

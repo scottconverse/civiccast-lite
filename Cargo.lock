@@ -118,6 +118,7 @@ version = "0.1.0"
 dependencies = [
  "getrandom 0.4.3",
  "gstreamer",
+ "rustix",
  "serde",
  "serde_json",
  "sha2",
@@ -134,6 +135,7 @@ dependencies = [
  "station-schedule",
  "station-storage",
  "station-windows-ipc",
+ "tempfile",
  "zeroize",
 ]
 
@@ -1924,6 +1926,7 @@ dependencies = [
  "gstreamer",
  "gstreamer-pbutils",
  "image",
+ "rustix",
  "serde_json",
  "sha2",
  "station-captions",

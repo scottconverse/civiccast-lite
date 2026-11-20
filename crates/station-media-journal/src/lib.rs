@@ -6579,6 +6579,7 @@ mod tests {
             read_journal_incremental(&path, Some(&legacy_cursor), 1, true),
             Err(JournalError::Corrupt { reason, .. }) if reason.contains("requires writer migration")
         ));
+        #[cfg(windows)]
         forget_verified_prefix_session(&path);
 
         let mut migrated = JournalWriter::open(&path, WORKER_ID, CHANNEL_ID).unwrap();
@@ -6986,6 +6987,8 @@ mod tests {
         assert!(!manifest_temp.exists());
     }
 
+    // Verifies the Windows no-delete handle and its interprocess duplication.
+    #[cfg(windows)]
     #[test]
     fn writer_locks_manifest_authority_across_every_promotion_boundary() {
         if std::env::var_os(MANIFEST_AUTHORITY_SWAP_CHILD).is_some() {

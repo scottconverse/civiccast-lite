@@ -1,5 +1,6 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
+#[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -243,7 +244,7 @@ pub fn derive_review_thumbnail(
     validate_asset_id(expected_asset_id)?;
     let source_metadata = fs::symlink_metadata(source)
         .map_err(|error| AssetError::InvalidSource(error.to_string()))?;
-    if source_metadata.file_attributes() & 0x0400 != 0 || !source_metadata.is_file() {
+    if is_link(&source_metadata) || !source_metadata.is_file() {
         return Err(AssetError::InvalidSource(
             "thumbnail source must be a non-reparse regular managed file".into(),
         ));
@@ -1165,12 +1166,23 @@ fn validate_asset_id(expected_asset_id: &str) -> Result<(), AssetError> {
     Ok(())
 }
 
+fn is_link(metadata: &fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        metadata.file_attributes() & 0x0400 != 0
+    }
+    #[cfg(unix)]
+    {
+        metadata.file_type().is_symlink()
+    }
+}
+
 fn ensure_non_reparse_ancestry(path: &Path) -> Result<(), AssetError> {
     let mut current = Some(path);
     while let Some(candidate) = current {
         let metadata = fs::symlink_metadata(candidate)
             .map_err(|_| AssetError::Io("managed thumbnail ancestry is unavailable".into()))?;
-        if metadata.file_attributes() & 0x0400 != 0 {
+        if is_link(&metadata) {
             return Err(AssetError::InvalidSource(
                 "managed thumbnail ancestry contains a reparse point".into(),
             ));
@@ -1185,7 +1197,7 @@ fn create_non_reparse_directory_chain(path: &Path) -> Result<(), AssetError> {
     for component in path.components() {
         current.push(component.as_os_str());
         match fs::symlink_metadata(&current) {
-            Ok(metadata) if metadata.file_attributes() & 0x0400 == 0 && metadata.is_dir() => {}
+            Ok(metadata) if !is_link(&metadata) && metadata.is_dir() => {}
             Ok(_) => {
                 return Err(AssetError::InvalidSource(
                     "managed thumbnail root contains a reparse point or non-directory".into(),
@@ -1198,7 +1210,7 @@ fn create_non_reparse_directory_chain(path: &Path) -> Result<(), AssetError> {
                 let parent_metadata = fs::symlink_metadata(parent).map_err(|_| {
                     AssetError::Io("managed thumbnail root parent is unavailable".into())
                 })?;
-                if parent_metadata.file_attributes() & 0x0400 != 0 || !parent_metadata.is_dir() {
+                if is_link(&parent_metadata) || !parent_metadata.is_dir() {
                     return Err(AssetError::InvalidSource(
                         "managed thumbnail root parent is a reparse point or non-directory".into(),
                     ));
@@ -1206,7 +1218,7 @@ fn create_non_reparse_directory_chain(path: &Path) -> Result<(), AssetError> {
                 fs::create_dir(&current).map_err(|error| AssetError::Io(error.to_string()))?;
                 let created = fs::symlink_metadata(&current)
                     .map_err(|error| AssetError::Io(error.to_string()))?;
-                if created.file_attributes() & 0x0400 != 0 || !created.is_dir() {
+                if is_link(&created) || !created.is_dir() {
                     return Err(AssetError::InvalidSource(
                         "managed thumbnail root changed after creation".into(),
                     ));
