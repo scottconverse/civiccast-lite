@@ -15,7 +15,6 @@ static SEQUENCE: AtomicU64 = AtomicU64::new(0);
 const SQLITE_OK: c_int = 0;
 const SQLITE_OPEN_READWRITE: c_int = 2;
 
-#[link(name = "winsqlite3")]
 unsafe extern "C" {
     fn sqlite3_open_v2(
         filename: *const c_char,

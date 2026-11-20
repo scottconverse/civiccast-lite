@@ -224,6 +224,9 @@ struct LegacyCommitReportRevisionBinding {
     approved_at_unix_ms: i64,
 }
 
+// Link the pinned SQLite amalgamation on every platform.
+use libsqlite3_sys as _;
+
 #[repr(C)]
 struct Sqlite3 {
     _private: [u8; 0],
@@ -234,7 +237,6 @@ struct SqliteStatement {
     _private: [u8; 0],
 }
 
-#[link(name = "winsqlite3")]
 unsafe extern "C" {
     fn sqlite3_open_v2(
         filename: *const c_char,
