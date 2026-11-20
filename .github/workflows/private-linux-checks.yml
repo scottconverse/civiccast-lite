@@ -1,0 +1,20 @@
+name: Private Linux station checks
+on:
+  push:
+    branches:
+      - verify/linux-27c1195
+permissions:
+  contents: read
+jobs:
+  linux-checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Install Rust 1.97.1
+        run: rustup toolchain install 1.97.1 --profile minimal
+      - name: Run station tests
+        run: cargo +1.97.1 test --locked -p station-schedule -p station-media-protocol
