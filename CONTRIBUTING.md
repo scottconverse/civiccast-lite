@@ -1,12 +1,12 @@
 # Contributing
 
-Townlight Station is developed in small, executable vertical slices.
+CivicCast Lab was developed in small, executable vertical slices.
 
 ## Setup
 
 1. Install Rust 1.97.1 or newer on Windows.
 2. Clone the repository.
-3. Run `cargo test --offline` to establish a clean baseline.
+3. Read SEPARATION.md. Development is paused; no clean baseline is claimed.
 
 ## Change contract
 
@@ -17,10 +17,11 @@ Townlight Station is developed in small, executable vertical slices.
 - Never commit secrets, station data, credentials, signing material, or generated database files.
 - Update operator, API, or architecture documentation in the same change as behavior.
 
-Before committing, run:
+For authorized Windows Cargo work, use only the pinned wrapper from the workspace root:
 
 ```powershell
-cargo fmt --check
-cargo clippy --offline --all-targets --all-features -- -D warnings
-cargo test --offline --workspace
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/invoke-cargo.ps1 test --locked -p <affected-package>
 ```
+
+Do not invoke raw Cargo or direct test binaries; native loader errors can open
+modal dialogs. Start with the named failures in SEPARATION.md and reuse other evidence.

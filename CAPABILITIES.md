@@ -1,3 +1,6 @@
+> CivicCast Lab: inherited Rust assessment. See [SEPARATION.md](SEPARATION.md).
+> Original dates and internal identities below are preserved; this is not Townlight recorder status.
+
 # Townlight Station capability ledger
 
 S22 now also includes bounded public discovery: unauthenticated `GET /api/v1/public/catalog` derives redacted pages in one read snapshot from Published catalog, Ready media, exact metadata history rows, historical value schemas, and current public-visibility policy. It exposes an opaque public ID, title, publication time, duration, and only currently `public && faceted` typed equality values. One boot-time identity audit plus immutable mapping triggers, indexed 500-candidate windows, and boot-scoped HMAC-authenticated filter/generation cursors bound anonymous work across the full catalog. This is a read-time projection—not a persistent/full-text index, public-site delivery, playback/OTT publication, installed-machine evidence, or field proof.

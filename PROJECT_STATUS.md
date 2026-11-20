@@ -1,6 +1,8 @@
+> CivicCast Lab: inherited Rust assessment. See [SEPARATION.md](SEPARATION.md).
+> Original dates and internal identities below are preserved; this is not Townlight recorder status.
+
 # Townlight Station project status
 
-> **Scope: historical Rust kernel assessment.** This dated document assesses the Rust station-kernel development line; it is not the release status of the separately shipped Python service in [`beta-1/`](beta-1/README.md). The Windows suite includes that service as Townlight Station 0.3.1, with separate configuration and [scoped Windows acceptance](https://github.com/townlight/townlight/releases/download/townlight-windows-v1.8.1.1/ACCEPTANCE-Windows-1.8.1.1.md). It does not establish completion of the Rust kernel or full station automation.
 
 **Status date:** 2026-08-29  
 **Release verdict:** not a beta release; not a complete PEG/Cablecast-equivalent product  
