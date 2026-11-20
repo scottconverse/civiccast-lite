@@ -1,11 +1,14 @@
+#[cfg(windows)]
+use std::sync::{Mutex, OnceLock};
 mod auth_handoff;
 mod config;
 
+#[cfg(windows)]
 use std::ffi::OsString;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    Arc, Mutex, OnceLock,
+    Arc,
     atomic::{AtomicBool, Ordering},
 };
 use std::time::Duration;
@@ -25,21 +28,28 @@ use station_storage::{
     ScheduleMaterializationApplyOutcome, ScheduleMaterializationFailureClass,
     ScheduleMaterializationRun, ScheduleMaterializationWriteError, StationStore,
 };
+#[cfg(windows)]
 use windows_service::define_windows_service;
+#[cfg(windows)]
 use windows_service::service::{
     ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState, ServiceStatus, ServiceType,
 };
+#[cfg(windows)]
 use windows_service::service_control_handler::{
     self, ServiceControlHandlerResult, ServiceStatusHandle,
 };
+#[cfg(windows)]
 use windows_service::service_dispatcher;
 
+#[cfg(windows)]
 const SERVICE_NAME: &str = "TownLightStation";
+#[cfg(windows)]
 const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 const ORCHESTRATION_STALE_AFTER: Duration = Duration::from_secs(45);
 const ORCHESTRATION_STARTUP_TIMEOUT: Duration = Duration::from_secs(60);
 const ORCHESTRATION_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(35);
 const WORKER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(35);
+#[cfg(windows)]
 static SERVICE_CONFIG: OnceLock<DaemonConfig> = OnceLock::new();
 
 struct InstalledCandidateAuthority {
@@ -217,6 +227,7 @@ impl CandidateAuthority for InstalledCandidateAuthority {
     }
 }
 
+#[cfg(windows)]
 define_windows_service!(ffi_service_main, service_main);
 
 fn main() {
@@ -224,7 +235,10 @@ fn main() {
         config::parse(std::env::args_os().skip(1)).unwrap_or_else(|message| fatal(&message));
     let result = match config.mode.clone() {
         LaunchMode::Console => run_console(config),
+        #[cfg(windows)]
         LaunchMode::Service => run_dispatcher(config),
+        #[cfg(unix)]
+        LaunchMode::Service => run_console(config),
         LaunchMode::AuthIssueBootstrapHandoff { handoff } => {
             auth_handoff::issue_bootstrap_handoff(&config.database, &handoff)
         }
@@ -256,6 +270,11 @@ fn run_console(config: DaemonConfig) -> Result<(), String> {
     let update_application = application_directory()?;
     let api_application = update_application.clone();
     let stop = Arc::new(AtomicBool::new(false));
+    #[cfg(unix)]
+    for signal in [signal_hook::consts::SIGTERM, signal_hook::consts::SIGINT] {
+        signal_hook::flag::register(signal, Arc::clone(&stop))
+            .map_err(|e| format!("install station shutdown handler: {e}"))?;
+    }
     let orchestration_health = Arc::new(OrchestrationHealth::new(ORCHESTRATION_STALE_AFTER));
     let orchestration = start_channel_orchestration(
         &config.database,
@@ -312,6 +331,7 @@ fn run_console(config: DaemonConfig) -> Result<(), String> {
             return Err(append_cleanup_error(error, cleanup.result));
         }
     };
+    #[cfg(windows)]
     let transport_queue = spawn_transport_proof_queue_controller(
         &config.database,
         &update_application,
@@ -323,6 +343,7 @@ fn run_console(config: DaemonConfig) -> Result<(), String> {
         Arc::clone(&stop),
     )?;
     let retention_scanner = spawn_retention_scanner(&config.database, Arc::clone(&stop))?;
+    #[cfg(windows)]
     let automation_execution_queue = spawn_automation_execution_queue_controller(
         &config.database,
         &update_application,
@@ -370,6 +391,7 @@ fn run_console(config: DaemonConfig) -> Result<(), String> {
             retention_scanner,
             WORKER_SHUTDOWN_TIMEOUT,
         ),
+        #[cfg(windows)]
         join_worker(
             "transport proof queue",
             transport_queue,
@@ -380,6 +402,7 @@ fn run_console(config: DaemonConfig) -> Result<(), String> {
             publishing_queue,
             WORKER_SHUTDOWN_TIMEOUT,
         ),
+        #[cfg(windows)]
         join_worker(
             "automation execution queue",
             automation_execution_queue,
@@ -395,6 +418,7 @@ fn run_console(config: DaemonConfig) -> Result<(), String> {
     result.and(worker_cleanup.result)
 }
 
+#[cfg(windows)]
 fn run_dispatcher(config: DaemonConfig) -> Result<(), String> {
     SERVICE_CONFIG
         .set(config)
@@ -402,6 +426,7 @@ fn run_dispatcher(config: DaemonConfig) -> Result<(), String> {
     service_dispatcher::start(SERVICE_NAME, ffi_service_main).map_err(|error| error.to_string())
 }
 
+#[cfg(windows)]
 fn service_main(_arguments: Vec<OsString>) {
     let config = SERVICE_CONFIG
         .get()
@@ -414,6 +439,7 @@ fn service_main(_arguments: Vec<OsString>) {
     }
 }
 
+#[cfg(windows)]
 fn run_service(config: DaemonConfig) -> Result<(), String> {
     let stop = Arc::new(AtomicBool::new(false));
     let orchestration_health = Arc::new(OrchestrationHealth::new(ORCHESTRATION_STALE_AFTER));
@@ -1033,6 +1059,7 @@ fn spawn_feed_fetch_worker(
         .map_err(|error| format!("could not start feed fetch worker thread: {error}"))
 }
 
+#[cfg(windows)]
 fn spawn_transport_proof_queue_controller(
     database: &std::path::Path,
     application_root: &std::path::Path,
@@ -1166,6 +1193,7 @@ fn spawn_retention_scanner(
     )
 }
 
+#[cfg(windows)]
 fn spawn_automation_execution_queue_controller(
     database: &std::path::Path,
     application_root: &std::path::Path,
@@ -1207,6 +1235,7 @@ fn bind(config: &DaemonConfig) -> Result<TcpListener, String> {
     })
 }
 
+#[cfg(windows)]
 fn service_status(
     current_state: ServiceState,
     controls_accepted: ServiceControlAccept,

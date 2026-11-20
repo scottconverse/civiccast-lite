@@ -5,8 +5,11 @@ use std::collections::{BTreeSet, HashMap};
 use std::io::{Read, Write};
 use std::net::UdpSocket;
 use std::net::{TcpListener, TcpStream};
+#[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
+#[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt;
+#[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -6917,10 +6920,7 @@ impl Api {
         )?;
         let metadata = std::fs::symlink_metadata(source_path)
             .map_err(|error| format!("inspect candidate source: {error}"))?;
-        if !metadata.file_type().is_file()
-            || metadata.len() == 0
-            || metadata.file_attributes() & 0x400 != 0
-        {
+        if !metadata.file_type().is_file() || metadata.len() == 0 || is_link_metadata(&metadata) {
             return Err("the candidate source must be a non-empty regular non-reparse file".into());
         }
         let parent = self
@@ -13134,7 +13134,7 @@ fn read_pinned_thumbnail_bytes(root: &Path, digest: &str) -> Result<Vec<u8>, Str
     let path = canonical_root.join(format!("{digest}.png"));
     let metadata =
         std::fs::symlink_metadata(&path).map_err(|_| "managed review evidence is unavailable")?;
-    if metadata.file_attributes() & 0x0400 != 0
+    if is_link_metadata(&metadata)
         || !metadata.is_file()
         || metadata.len() == 0
         || metadata.len() > MAX_THUMBNAIL_BYTES
@@ -13168,7 +13168,7 @@ fn ensure_non_reparse_ancestry(path: &Path) -> Result<(), String> {
     while let Some(candidate) = current {
         let metadata = std::fs::symlink_metadata(candidate)
             .map_err(|_| "managed review evidence ancestry is unavailable")?;
-        if metadata.file_attributes() & 0x0400 != 0 {
+        if is_link_metadata(&metadata) {
             return Err("managed review evidence ancestry contains a reparse point".into());
         }
         current = candidate.parent();
@@ -13206,7 +13206,31 @@ fn publish_execution_job_response(
     }
 }
 
+fn is_link_metadata(metadata: &std::fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        metadata.file_attributes() & 0x400 != 0
+    }
+    #[cfg(unix)]
+    {
+        metadata.file_type().is_symlink()
+    }
+}
+
 fn hash_publish_file(path: &Path) -> Result<(u64, String), String> {
+    #[cfg(unix)]
+    let mut file = std::fs::File::from(
+        rustix::fs::open(
+            path,
+            rustix::fs::OFlags::RDONLY
+                | rustix::fs::OFlags::NOFOLLOW
+                | rustix::fs::OFlags::NONBLOCK
+                | rustix::fs::OFlags::CLOEXEC,
+            rustix::fs::Mode::empty(),
+        )
+        .map_err(|e| format!("open publish media for hashing: {e}"))?,
+    );
+    #[cfg(windows)]
     let mut file = std::fs::OpenOptions::new()
         .read(true)
         .share_mode(
@@ -13219,7 +13243,7 @@ fn hash_publish_file(path: &Path) -> Result<(u64, String), String> {
     let metadata = file
         .metadata()
         .map_err(|error| format!("inspect publish media for hashing: {error}"))?;
-    if metadata.file_attributes() & 0x0400 != 0 || !metadata.is_file() {
+    if is_link_metadata(&metadata) || !metadata.is_file() {
         return Err("publish media is a reparse point or not a regular file".into());
     }
     let mut digest = Sha256::new();
@@ -14066,7 +14090,9 @@ fn collect_station_box_probe(
 
 fn probe_installed_engine(application_directory: &Path) -> EngineProbeInput {
     let runtime = application_directory.join("runtime").join("gstreamer");
-    let executable = runtime.join("bin").join("gst-inspect-1.0.exe");
+    let executable = runtime
+        .join("bin")
+        .join(format!("gst-inspect-1.0{}", std::env::consts::EXE_SUFFIX));
     let required_factories = REQUIRED_MEDIA_FACTORIES
         .iter()
         .map(|name| (*name).to_string())
@@ -14267,6 +14293,12 @@ fn parse_windows_time_probe_result(output: &[u8]) -> WindowsTimeProbeResult {
     }
 }
 
+#[cfg(unix)]
+fn probe_windows_time() -> WindowsTimeProbeResult {
+    unknown_windows_time_probe(ClockSyncStatus::Unavailable)
+}
+
+#[cfg(windows)]
 fn probe_windows_time() -> WindowsTimeProbeResult {
     let mut command = hidden_command("powershell.exe");
     command.args([
@@ -14284,10 +14316,15 @@ fn probe_windows_time() -> WindowsTimeProbeResult {
 }
 
 fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let mut command = Command::new(program);
-    command.creation_flags(CREATE_NO_WINDOW);
-    command
+    #[cfg(unix)]
+    return Command::new(program);
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let mut command = Command::new(program);
+        command.creation_flags(CREATE_NO_WINDOW);
+        command
+    }
 }
 
 #[derive(Debug)]
@@ -14502,14 +14539,15 @@ pub fn serve_until_with_application_directory_and_health_and_source_evidence_aut
                 let active = active_requests.fetch_add(1, Ordering::AcqRel);
                 if active >= MAX_CONCURRENT_REQUESTS {
                     active_requests.fetch_sub(1, Ordering::AcqRel);
-                    write_response(
+                    // A caller may already have disconnected while waiting in the listen backlog.
+                    let _ = write_response(
                         &mut stream,
                         error_response(
                             503,
                             "server_busy",
                             "The station is handling the maximum number of concurrent requests.",
                         ),
-                    )?;
+                    );
                     continue;
                 }
                 let request_database = database_path.clone();

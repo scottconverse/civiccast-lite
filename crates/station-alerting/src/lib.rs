@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
+#[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::{
@@ -28,9 +29,13 @@ use station_domain::{
 use station_storage::{AlertChannelSecret, StationStore};
 use ureq::Agent;
 use ureq::tls::{RootCerts, TlsConfig};
+#[cfg(windows)]
 use windows_sys::Win32::Foundation::FILETIME;
+#[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+#[cfg(windows)]
 use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+#[cfg(windows)]
 use windows_sys::Win32::System::Threading::GetSystemTimes;
 
 const DEFAULT_LEASE_DURATION_MS: i64 = 30_000;
@@ -565,6 +570,7 @@ pub fn probe_system_resources(
     Ok(sample)
 }
 
+#[cfg(windows)]
 fn memory_usage() -> Result<(f64, f64), String> {
     let mut status: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
     status.dwLength = u32::try_from(std::mem::size_of::<MEMORYSTATUSEX>())
@@ -578,6 +584,7 @@ fn memory_usage() -> Result<(f64, f64), String> {
     Ok(((total - available).max(0.0), total))
 }
 
+#[cfg(windows)]
 fn cpu_usage() -> Result<f64, String> {
     let first = system_times()?;
     std::thread::sleep(Duration::from_millis(50));
@@ -590,6 +597,7 @@ fn cpu_usage() -> Result<f64, String> {
     Ok((100.0 * (total.saturating_sub(idle)) as f64 / total as f64).clamp(0.0, 100.0))
 }
 
+#[cfg(windows)]
 fn system_times() -> Result<(u64, u64, u64), String> {
     let mut idle: FILETIME = unsafe { std::mem::zeroed() };
     let mut kernel: FILETIME = unsafe { std::mem::zeroed() };
@@ -604,10 +612,12 @@ fn system_times() -> Result<(u64, u64, u64), String> {
     ))
 }
 
+#[cfg(windows)]
 fn filetime_ticks(value: FILETIME) -> u64 {
     (u64::from(value.dwHighDateTime) << 32) | u64::from(value.dwLowDateTime)
 }
 
+#[cfg(windows)]
 fn disk_free_gb(path: &Path) -> Result<f64, String> {
     let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
     let mut available = 0_u64;
@@ -626,6 +636,39 @@ fn disk_free_gb(path: &Path) -> Result<f64, String> {
         ));
     }
     Ok(available as f64 / 1_073_741_824.0)
+}
+
+#[cfg(unix)]
+fn memory_usage() -> Result<(f64, f64), String> {
+    let mut system = sysinfo::System::new();
+    system.refresh_memory();
+    let total = system.total_memory();
+    if total == 0 {
+        return Err("system memory statistics unavailable".into());
+    }
+    Ok((
+        system.used_memory() as f64 / 1_073_741_824.0,
+        total as f64 / 1_073_741_824.0,
+    ))
+}
+
+#[cfg(unix)]
+fn cpu_usage() -> Result<f64, String> {
+    let mut system = sysinfo::System::new();
+    system.refresh_cpu_usage();
+    std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
+    system.refresh_cpu_usage();
+    if system.cpus().is_empty() {
+        return Err("system CPU statistics unavailable".into());
+    }
+    Ok(f64::from(system.global_cpu_usage()))
+}
+
+#[cfg(unix)]
+fn disk_free_gb(path: &Path) -> Result<f64, String> {
+    let fs = rustix::fs::statvfs(path)
+        .map_err(|e| format!("read free space for {}: {e}", path.display()))?;
+    Ok(fs.f_bavail as f64 * fs.f_frsize as f64 / 1_073_741_824.0)
 }
 
 fn backup_write_probe(directory: &Path) -> bool {

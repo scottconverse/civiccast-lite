@@ -1,3 +1,7 @@
+#[cfg(unix)]
+mod recording_unix;
+#[cfg(unix)]
+use recording_unix::publish_recording_capture;
 mod scheduled_recording_controller;
 
 use scheduled_recording_controller::{
@@ -7,11 +11,16 @@ use scheduled_recording_controller::{
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
+#[cfg(windows)]
+use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::num::NonZeroU16;
+#[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
+#[cfg(windows)]
 use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+#[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
 use std::sync::{
@@ -69,23 +78,28 @@ use station_storage::{
     ScheduledTakeAcknowledgementBinding, ScheduledTakeApplyOutcome, StationStore,
     project_durable_journal,
 };
+#[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{
     FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
     FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
 };
+#[cfg(windows)]
 use windows_sys::Win32::System::IO::CancelSynchronousIo;
 
+#[cfg(windows)]
 #[repr(C)]
 struct RecordingFileId128 {
     bytes: [u8; 16],
 }
 
+#[cfg(windows)]
 #[repr(C)]
 struct RecordingFileIdInfo {
     volume_serial_number: u64,
     file_id: RecordingFileId128,
 }
 
+#[cfg(windows)]
 #[link(name = "kernel32")]
 unsafe extern "system" {
     fn GetFileInformationByHandleEx(
@@ -1019,8 +1033,10 @@ struct CaptionDispatchState {
     missed_cue_ids: HashSet<String>,
 }
 
+#[cfg(windows)]
 struct TemporaryRecordingPublication(PathBuf);
 
+#[cfg(windows)]
 impl Drop for TemporaryRecordingPublication {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.0);
@@ -1057,6 +1073,7 @@ struct RecordingFinalizationTask {
 impl RecordingFinalizationTask {
     fn request_cancel(&self) {
         self.cancel.store(true, Ordering::Release);
+        #[cfg(windows)]
         if let Some(join) = &self.join {
             // Chunk checks handle ordinary progress. CancelSynchronousIo is
             // the second fence for a thread blocked in a synchronous file
@@ -1104,6 +1121,7 @@ impl Drop for RecordingFinalizationTask {
     }
 }
 
+#[cfg(windows)]
 fn open_recording_directory_no_follow(path: &Path) -> Result<File, String> {
     let file = OpenOptions::new()
         .read(true)
@@ -1120,6 +1138,7 @@ fn open_recording_directory_no_follow(path: &Path) -> Result<File, String> {
     Ok(file)
 }
 
+#[cfg(windows)]
 fn pin_recording_ancestry(path: &Path) -> Result<Vec<File>, String> {
     if !path.is_absolute() {
         return Err("managed recording path must be absolute".into());
@@ -1132,6 +1151,7 @@ fn pin_recording_ancestry(path: &Path) -> Result<Vec<File>, String> {
         .collect()
 }
 
+#[cfg(windows)]
 fn open_recording_file_no_follow(path: &Path) -> Result<File, String> {
     let file = OpenOptions::new()
         .read(true)
@@ -1150,6 +1170,7 @@ fn open_recording_file_no_follow(path: &Path) -> Result<File, String> {
     Ok(file)
 }
 
+#[cfg(windows)]
 fn recording_file_identity(file: &File) -> Result<(u64, [u8; 16]), String> {
     const FILE_ID_INFO_CLASS: i32 = 18;
     let mut info = RecordingFileIdInfo {
@@ -1212,6 +1233,7 @@ fn hash_open_recording(
     Ok((format!("{:x}", digest.finalize()), bytes))
 }
 
+#[cfg(windows)]
 fn publish_recording_part(temporary_path: &Path, final_path: &Path) -> Result<bool, String> {
     const MOVEFILE_WRITE_THROUGH: u32 = 0x0000_0008;
     let temporary_wide = temporary_path
@@ -1248,6 +1270,7 @@ fn publish_recording_part(temporary_path: &Path, final_path: &Path) -> Result<bo
     Ok(true)
 }
 
+#[cfg(windows)]
 fn publish_recording_capture(
     database_path: &Path,
     channel_id: &str,
@@ -5755,8 +5778,7 @@ mod tests {
         expire_due_bulletins, generate_live_arm_token, hash_capture, is_abort_confirmation,
         lease_renewal_due, managed_cg_image_root, observe_asrun_projection_alert_failure,
         observe_caption_cue_misses, on_air_source_started_at, promote_caption_proof_artifact,
-        proof_artifact_path, proof_bindings_match, publish_recording_part,
-        ready_duration_is_bounded, recording_file_identity,
+        proof_artifact_path, proof_bindings_match, ready_duration_is_bounded,
         resolve_asrun_projection_alert_after_catch_up, resolve_caption_cue_miss_after_admission,
         resolved_snapshot_to_protocol, stalled_required_output,
     };
@@ -5780,6 +5802,7 @@ mod tests {
         ChannelCommand, CommandEnvelope, PROTOCOL_VERSION, WorkerEvent, WorkerEventEnvelope,
         decode_command_frame, encode_command_frame,
     };
+    use station_runtime::worker_transport::IpcError;
     use station_runtime::{CommandAttemptFailure, SupervisorError};
     use station_schedule::{
         AssetReadiness, ChannelConfiguration, DispatchStatus, MediaAsset, OutputProfileId,
@@ -5794,7 +5817,6 @@ mod tests {
         ChannelCaptionMode, OutputLoudnessProofJob, OutputLoudnessProofJobState, ScheduleItemWrite,
         ScheduleMaterializationApplyOutcome, ScheduleMaterializationOutcome, StationStore,
     };
-    use station_windows_ipc::IpcError;
     use std::collections::{BTreeMap, HashSet};
     use std::path::PathBuf;
     use std::sync::mpsc;
@@ -7955,6 +7977,12 @@ mod tests {
 
     #[test]
     fn concurrent_recording_publication_preserves_the_existing_winner() {
+        #[cfg(windows)]
+        use super::{publish_recording_part, recording_file_identity};
+        #[cfg(unix)]
+        use std::os::unix::fs::MetadataExt;
+        #[cfg(unix)]
+        let recording_file_identity = |f: &std::fs::File| f.metadata().map(|m| (m.dev(), m.ino()));
         let root = database_path("recording-publication-race").with_extension("dir");
         std::fs::create_dir_all(&root).unwrap();
         let temporary_path = root.join("owned-attempt.part");
@@ -7964,8 +7992,17 @@ mod tests {
         let winner_identity_before =
             recording_file_identity(&std::fs::File::open(&final_path).unwrap()).unwrap();
 
+        #[cfg(windows)]
+        let published = publish_recording_part(&temporary_path, &final_path).unwrap();
+        #[cfg(unix)]
+        let published = super::recording_unix::publish_part(
+            &std::fs::File::open(&root).unwrap(),
+            "owned-attempt.part",
+            "content-hash.ts",
+        )
+        .unwrap();
         assert!(
-            !publish_recording_part(&temporary_path, &final_path).unwrap(),
+            !published,
             "an existing destination must take the concurrent-winner path"
         );
 

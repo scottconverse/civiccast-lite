@@ -1,98 +1,28 @@
-use std::ffi::c_void;
-use std::fs::File;
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+use windows::create_secure_handoff_file;
+#[cfg(unix)]
+fn create_secure_handoff_file(path: &Path) -> Result<std::fs::File, String> {
+    use std::os::unix::fs::OpenOptionsExt;
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path)
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::AlreadyExists => "bootstrap handoff file already exists".into(),
+            _ => format!("could not create bootstrap handoff file: {e}"),
+        })
+}
 use std::io::Write as _;
-use std::os::windows::ffi::OsStrExt as _;
-use std::os::windows::io::{FromRawHandle as _, RawHandle};
 use std::path::Path;
-use std::ptr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use station_auth::{
     BOOTSTRAP_MAX_LIFETIME_MS, BootstrapCredential, digest_secret, generate_secret_token,
 };
 use station_storage::StationStore;
-
-type Bool = i32;
-type Dword = u32;
-type Handle = *mut c_void;
-
-const HANDOFF_SDDL: &str = "D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;OW)";
-const INVALID_HANDLE_VALUE: Handle = -1_isize as Handle;
-const GENERIC_WRITE: Dword = 0x4000_0000;
-const CREATE_NEW: Dword = 1;
-const FILE_ATTRIBUTE_NORMAL: Dword = 0x0000_0080;
-const SECURITY_DESCRIPTOR_REVISION: Dword = 1;
-const ERROR_FILE_EXISTS: Dword = 80;
-const ERROR_ALREADY_EXISTS: Dword = 183;
-
-#[repr(C)]
-struct SecurityAttributes {
-    length: Dword,
-    security_descriptor: *mut c_void,
-    inherit_handle: Bool,
-}
-
-#[link(name = "kernel32")]
-unsafe extern "system" {
-    fn CreateFileW(
-        name: *const u16,
-        desired_access: Dword,
-        share_mode: Dword,
-        security_attributes: *mut SecurityAttributes,
-        creation_disposition: Dword,
-        flags_and_attributes: Dword,
-        template_file: Handle,
-    ) -> Handle;
-    fn GetLastError() -> Dword;
-    fn LocalFree(memory: *mut c_void) -> *mut c_void;
-}
-
-#[link(name = "advapi32")]
-unsafe extern "system" {
-    fn ConvertStringSecurityDescriptorToSecurityDescriptorW(
-        string_security_descriptor: *const u16,
-        string_revision: Dword,
-        security_descriptor: *mut *mut c_void,
-        security_descriptor_size: *mut Dword,
-    ) -> Bool;
-}
-
-struct SecurityDescriptor {
-    raw: *mut c_void,
-}
-
-impl SecurityDescriptor {
-    fn handoff() -> Result<Self, String> {
-        let sddl = HANDOFF_SDDL
-            .encode_utf16()
-            .chain(std::iter::once(0))
-            .collect::<Vec<_>>();
-        let mut raw = ptr::null_mut();
-        // SAFETY: the SDDL string is null-terminated and `raw` points to writable storage.
-        let converted = unsafe {
-            ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                sddl.as_ptr(),
-                SECURITY_DESCRIPTOR_REVISION,
-                &mut raw,
-                ptr::null_mut(),
-            )
-        };
-        if converted == 0 {
-            Err(last_windows_error(
-                "could not create bootstrap handoff security descriptor",
-            ))
-        } else {
-            Ok(Self { raw })
-        }
-    }
-}
-
-impl Drop for SecurityDescriptor {
-    fn drop(&mut self) {
-        // SAFETY: the SDDL conversion allocated this descriptor; it is freed exactly once.
-        unsafe { LocalFree(self.raw) };
-    }
-}
 
 pub(crate) fn issue_bootstrap_handoff(database: &Path, handoff: &Path) -> Result<(), String> {
     let now_unix_ms = SystemTime::now()
@@ -165,64 +95,8 @@ fn issue_bootstrap_handoff_at(
     Ok(())
 }
 
-fn create_secure_handoff_file(path: &Path) -> Result<File, String> {
-    let wide_path = path
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    let security = SecurityDescriptor::handoff()?;
-    let mut attributes = SecurityAttributes {
-        length: std::mem::size_of::<SecurityAttributes>() as Dword,
-        security_descriptor: security.raw,
-        inherit_handle: 0,
-    };
-    // SAFETY: path and security descriptor remain live through the call, attributes has the
-    // Windows ABI layout, CREATE_NEW is atomic, and a successful handle is uniquely owned here.
-    let handle = unsafe {
-        CreateFileW(
-            wide_path.as_ptr(),
-            GENERIC_WRITE,
-            0,
-            &mut attributes,
-            CREATE_NEW,
-            FILE_ATTRIBUTE_NORMAL,
-            ptr::null_mut(),
-        )
-    };
-    if handle == INVALID_HANDLE_VALUE {
-        // SAFETY: GetLastError reads the calling thread's error value immediately after failure.
-        let code = unsafe { GetLastError() };
-        if matches!(code, ERROR_FILE_EXISTS | ERROR_ALREADY_EXISTS) {
-            Err("bootstrap handoff file already exists".into())
-        } else {
-            Err(windows_error(
-                "could not create bootstrap handoff file",
-                code,
-            ))
-        }
-    } else {
-        // SAFETY: CreateFileW returned a unique owned file handle. File closes it exactly once.
-        Ok(unsafe { File::from_raw_handle(handle as RawHandle) })
-    }
-}
-
-fn last_windows_error(operation: &str) -> String {
-    // SAFETY: GetLastError reads the calling thread's error value.
-    windows_error(operation, unsafe { GetLastError() })
-}
-
-fn windows_error(operation: &str, code: Dword) -> String {
-    format!(
-        "{operation}: {} (Windows error {code})",
-        std::io::Error::from_raw_os_error(code as i32)
-    )
-}
-
 #[cfg(test)]
 mod tests {
-    use std::ffi::c_void;
-    use std::ptr;
 
     use station_auth::{BOOTSTRAP_MAX_LIFETIME_MS, SecretToken, digest_secret};
 
@@ -264,6 +138,14 @@ mod tests {
 
         issue_bootstrap_handoff_at(&database, &handoff, 1_000).unwrap();
 
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&handoff).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
         let handoff_bytes = std::fs::read(&handoff).unwrap();
         assert_eq!(handoff_bytes.last(), Some(&b'\n'));
         assert_eq!(
@@ -326,15 +208,16 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    #[cfg(windows)]
     #[test]
     fn handoff_dacl_does_not_inherit_a_permissive_parent() {
-        let root = permissive_test_root("handoff-dacl");
+        let root = acl::permissive_test_root("handoff-dacl");
         let database = root.join("station.db");
         let handoff = root.join("bootstrap.capability");
 
         issue_bootstrap_handoff_at(&database, &handoff, 1_000).unwrap();
 
-        let sddl = file_dacl_sddl(&handoff);
+        let sddl = acl::file_dacl_sddl(&handoff);
         eprintln!("handoff_dacl={sddl}");
         assert!(sddl.starts_with("D:P"), "DACL was not protected: {sddl}");
         for forbidden in [";;;WD)", ";;;BU)", ";;;AU)"] {
@@ -357,147 +240,152 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
-    type Bool = i32;
-    type Dword = u32;
+    #[cfg(windows)]
+    mod acl {
+        use super::*;
+        use std::{ffi::c_void, os::windows::ffi::OsStrExt, ptr};
+        type Bool = i32;
+        type Dword = u32;
 
-    const SECURITY_DESCRIPTOR_REVISION: Dword = 1;
-    const DACL_SECURITY_INFORMATION: Dword = 0x0000_0004;
-    const SE_FILE_OBJECT: Dword = 1;
+        const SECURITY_DESCRIPTOR_REVISION: Dword = 1;
+        const DACL_SECURITY_INFORMATION: Dword = 0x0000_0004;
+        const SE_FILE_OBJECT: Dword = 1;
 
-    #[repr(C)]
-    struct TestSecurityAttributes {
-        length: Dword,
-        security_descriptor: *mut c_void,
-        inherit_handle: Bool,
-    }
-
-    #[link(name = "kernel32")]
-    unsafe extern "system" {
-        fn CreateDirectoryW(
-            path: *const u16,
-            security_attributes: *mut TestSecurityAttributes,
-        ) -> Bool;
-        fn GetLastError() -> Dword;
-        fn LocalFree(memory: *mut c_void) -> *mut c_void;
-    }
-
-    #[link(name = "advapi32")]
-    unsafe extern "system" {
-        fn ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            string_security_descriptor: *const u16,
-            string_revision: Dword,
-            security_descriptor: *mut *mut c_void,
-            security_descriptor_size: *mut Dword,
-        ) -> Bool;
-        fn GetNamedSecurityInfoW(
-            object_name: *mut u16,
-            object_type: Dword,
-            security_information: Dword,
-            owner: *mut *mut c_void,
-            group: *mut *mut c_void,
-            dacl: *mut *mut c_void,
-            sacl: *mut *mut c_void,
-            security_descriptor: *mut *mut c_void,
-        ) -> Dword;
-        fn ConvertSecurityDescriptorToStringSecurityDescriptorW(
+        #[repr(C)]
+        struct TestSecurityAttributes {
+            length: Dword,
             security_descriptor: *mut c_void,
-            string_revision: Dword,
-            security_information: Dword,
-            string_security_descriptor: *mut *mut u16,
-            string_security_descriptor_length: *mut Dword,
-        ) -> Bool;
-    }
+            inherit_handle: Bool,
+        }
 
-    struct TestSecurityDescriptor(*mut c_void);
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn CreateDirectoryW(
+                path: *const u16,
+                security_attributes: *mut TestSecurityAttributes,
+            ) -> Bool;
+            fn GetLastError() -> Dword;
+            fn LocalFree(memory: *mut c_void) -> *mut c_void;
+        }
 
-    impl TestSecurityDescriptor {
-        fn from_sddl(value: &str) -> Self {
-            let wide = wide_null(value);
-            let mut raw = ptr::null_mut();
-            // SAFETY: `wide` is null-terminated and `raw` points to writable storage.
-            let converted = unsafe {
-                ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                    wide.as_ptr(),
-                    SECURITY_DESCRIPTOR_REVISION,
-                    &mut raw,
+        #[link(name = "advapi32")]
+        unsafe extern "system" {
+            fn ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                string_security_descriptor: *const u16,
+                string_revision: Dword,
+                security_descriptor: *mut *mut c_void,
+                security_descriptor_size: *mut Dword,
+            ) -> Bool;
+            fn GetNamedSecurityInfoW(
+                object_name: *mut u16,
+                object_type: Dword,
+                security_information: Dword,
+                owner: *mut *mut c_void,
+                group: *mut *mut c_void,
+                dacl: *mut *mut c_void,
+                sacl: *mut *mut c_void,
+                security_descriptor: *mut *mut c_void,
+            ) -> Dword;
+            fn ConvertSecurityDescriptorToStringSecurityDescriptorW(
+                security_descriptor: *mut c_void,
+                string_revision: Dword,
+                security_information: Dword,
+                string_security_descriptor: *mut *mut u16,
+                string_security_descriptor_length: *mut Dword,
+            ) -> Bool;
+        }
+
+        struct TestSecurityDescriptor(*mut c_void);
+
+        impl TestSecurityDescriptor {
+            fn from_sddl(value: &str) -> Self {
+                let wide = wide_null(value);
+                let mut raw = ptr::null_mut();
+                // SAFETY: `wide` is null-terminated and `raw` points to writable storage.
+                let converted = unsafe {
+                    ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                        wide.as_ptr(),
+                        SECURITY_DESCRIPTOR_REVISION,
+                        &mut raw,
+                        ptr::null_mut(),
+                    )
+                };
+                assert_ne!(converted, 0, "could not create test security descriptor");
+                Self(raw)
+            }
+        }
+
+        impl Drop for TestSecurityDescriptor {
+            fn drop(&mut self) {
+                // SAFETY: the SDDL conversion allocated this descriptor; it is freed once.
+                unsafe { LocalFree(self.0) };
+            }
+        }
+
+        pub(super) fn permissive_test_root(label: &str) -> std::path::PathBuf {
+            let nonce = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let root = std::env::temp_dir().join(format!("townlight-stationd-{label}-{nonce}"));
+            let descriptor = TestSecurityDescriptor::from_sddl("D:P(A;;GA;;;WD)");
+            let mut attributes = TestSecurityAttributes {
+                length: std::mem::size_of::<TestSecurityAttributes>() as Dword,
+                security_descriptor: descriptor.0,
+                inherit_handle: 0,
+            };
+            let wide = wide_null(root.as_os_str().to_str().unwrap());
+            // SAFETY: path and descriptor live through the call and attributes has the Windows ABI.
+            let created = unsafe { CreateDirectoryW(wide.as_ptr(), &mut attributes) };
+            assert_ne!(created, 0, "CreateDirectoryW failed: {}", unsafe {
+                GetLastError()
+            });
+            root
+        }
+
+        pub(super) fn file_dacl_sddl(path: &Path) -> String {
+            let mut wide_path = wide_null(path.as_os_str().to_str().unwrap());
+            let mut descriptor = ptr::null_mut();
+            // SAFETY: the path is null-terminated and descriptor points to writable storage.
+            let code = unsafe {
+                GetNamedSecurityInfoW(
+                    wide_path.as_mut_ptr(),
+                    SE_FILE_OBJECT,
+                    DACL_SECURITY_INFORMATION,
                     ptr::null_mut(),
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                    &mut descriptor,
                 )
             };
-            assert_ne!(converted, 0, "could not create test security descriptor");
-            Self(raw)
+            assert_eq!(code, 0, "GetNamedSecurityInfoW failed: {code}");
+            let descriptor = TestSecurityDescriptor(descriptor);
+            let mut sddl = ptr::null_mut();
+            let mut sddl_len = 0;
+            // SAFETY: descriptor is valid and output pointers refer to writable storage.
+            let converted = unsafe {
+                ConvertSecurityDescriptorToStringSecurityDescriptorW(
+                    descriptor.0,
+                    SECURITY_DESCRIPTOR_REVISION,
+                    DACL_SECURITY_INFORMATION,
+                    &mut sddl,
+                    &mut sddl_len,
+                )
+            };
+            assert_ne!(converted, 0, "could not render handoff DACL");
+            // SAFETY: conversion returned `sddl_len` initialized UTF-16 code units.
+            let rendered = String::from_utf16(unsafe {
+                std::slice::from_raw_parts(sddl, usize::try_from(sddl_len).unwrap())
+            })
+            .unwrap();
+            // SAFETY: conversion allocated this SDDL string; it is freed once after copying.
+            unsafe { LocalFree(sddl.cast()) };
+            rendered.trim_end_matches('\0').to_owned()
         }
-    }
 
-    impl Drop for TestSecurityDescriptor {
-        fn drop(&mut self) {
-            // SAFETY: the SDDL conversion allocated this descriptor; it is freed once.
-            unsafe { LocalFree(self.0) };
+        fn wide_null(value: &str) -> Vec<u16> {
+            value.encode_utf16().chain(std::iter::once(0)).collect()
         }
-    }
-
-    fn permissive_test_root(label: &str) -> std::path::PathBuf {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("townlight-stationd-{label}-{nonce}"));
-        let descriptor = TestSecurityDescriptor::from_sddl("D:P(A;;GA;;;WD)");
-        let mut attributes = TestSecurityAttributes {
-            length: std::mem::size_of::<TestSecurityAttributes>() as Dword,
-            security_descriptor: descriptor.0,
-            inherit_handle: 0,
-        };
-        let wide = wide_null(root.as_os_str().to_str().unwrap());
-        // SAFETY: path and descriptor live through the call and attributes has the Windows ABI.
-        let created = unsafe { CreateDirectoryW(wide.as_ptr(), &mut attributes) };
-        assert_ne!(created, 0, "CreateDirectoryW failed: {}", unsafe {
-            GetLastError()
-        });
-        root
-    }
-
-    fn file_dacl_sddl(path: &Path) -> String {
-        let mut wide_path = wide_null(path.as_os_str().to_str().unwrap());
-        let mut descriptor = ptr::null_mut();
-        // SAFETY: the path is null-terminated and descriptor points to writable storage.
-        let code = unsafe {
-            GetNamedSecurityInfoW(
-                wide_path.as_mut_ptr(),
-                SE_FILE_OBJECT,
-                DACL_SECURITY_INFORMATION,
-                ptr::null_mut(),
-                ptr::null_mut(),
-                ptr::null_mut(),
-                ptr::null_mut(),
-                &mut descriptor,
-            )
-        };
-        assert_eq!(code, 0, "GetNamedSecurityInfoW failed: {code}");
-        let descriptor = TestSecurityDescriptor(descriptor);
-        let mut sddl = ptr::null_mut();
-        let mut sddl_len = 0;
-        // SAFETY: descriptor is valid and output pointers refer to writable storage.
-        let converted = unsafe {
-            ConvertSecurityDescriptorToStringSecurityDescriptorW(
-                descriptor.0,
-                SECURITY_DESCRIPTOR_REVISION,
-                DACL_SECURITY_INFORMATION,
-                &mut sddl,
-                &mut sddl_len,
-            )
-        };
-        assert_ne!(converted, 0, "could not render handoff DACL");
-        // SAFETY: conversion returned `sddl_len` initialized UTF-16 code units.
-        let rendered = String::from_utf16(unsafe {
-            std::slice::from_raw_parts(sddl, usize::try_from(sddl_len).unwrap())
-        })
-        .unwrap();
-        // SAFETY: conversion allocated this SDDL string; it is freed once after copying.
-        unsafe { LocalFree(sddl.cast()) };
-        rendered.trim_end_matches('\0').to_owned()
-    }
-
-    fn wide_null(value: &str) -> Vec<u16> {
-        value.encode_utf16().chain(std::iter::once(0)).collect()
     }
 }
