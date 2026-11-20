@@ -14,6 +14,10 @@ use station_schedule::OutputProfileId;
 #[path = "worker_transport_windows.rs"]
 pub mod worker_transport;
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[path = "worker_transport_unix.rs"]
+pub mod worker_transport;
+
 use worker_transport::{
     ContainedProcess, IpcError, PipeStream, ProcessContainment, abandon_launch,
     request_termination, terminate_bounded,

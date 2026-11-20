@@ -2043,6 +2043,7 @@ dependencies = [
 name = "station-runtime"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "station-media-protocol",
  "station-schedule",
  "station-windows-ipc",

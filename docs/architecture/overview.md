@@ -10,8 +10,11 @@ stop handler, and orchestration failure receipt. The shared supervisor owns the
 versioned bootstrap and validates worker identity and event sequence. Its Windows
 transport in `crates/station-runtime/src/worker_transport_windows.rs` binds the
 protected local pipe, launches the contained child, and handles bounded cleanup.
-The worker uses the same transport module to connect. This boundary currently has
-a Windows implementation.
+The worker uses the same transport module to connect. Linux and macOS instead pass one end of
+an unnamed Unix socket pair to the worker at exec. The child checks the peer
+credentials and keeps the control descriptor out of subsequent execs. The
+supervisor owns a separate Unix process group per worker and terminates the
+group before reaping the leader, preserving its identity through cleanup.
 
 ```mermaid
 flowchart LR
