@@ -700,3 +700,18 @@ fn validate_slug(value: &str, maximum: usize, field: &str) -> Result<(), String>
     }
     Ok(())
 }
+
+pub fn validate_on_air_rtmp(value: &str) -> Result<(), String> {
+    if value.len() > 4096 || value.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return Err("invalid continuous RTMP destination".into());
+    }
+    let url = url::Url::parse(value).map_err(|_| "invalid continuous RTMP destination")?;
+    if !matches!(url.scheme(), "rtmp" | "rtmps")
+        || url.host().is_none()
+        || url.path().trim_matches('/').is_empty()
+        || url.fragment().is_some()
+    {
+        return Err("invalid continuous RTMP destination".into());
+    }
+    Ok(())
+}

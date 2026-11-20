@@ -330,6 +330,7 @@ pub enum EngineError {
 
 pub struct PersistentPlayout {
     pipeline: gst::Pipeline,
+    program_transport: gst::Pad,
     video_selector: gst::Element,
     video_fallback_pad: gst::Pad,
     video_program_pad: gst::Pad,
@@ -432,7 +433,49 @@ struct LoudnessVariant {
     transport_fanout: gst::Element,
 }
 
+pub struct OnAirSubscription {
+    pad: gst::Pad,
+    id: Option<gst::PadProbeId>,
+}
+impl Drop for OnAirSubscription {
+    fn drop(&mut self) {
+        if let Some(id) = self.id.take() {
+            self.pad.remove_probe(id);
+        }
+    }
+}
+
 impl PersistentPlayout {
+    /// Subscribe to the first configured cable profile after composition and encoding.
+    /// A full or disconnected publisher queue must never block playout.
+    pub fn subscribe_on_air(
+        &self,
+        sender: SyncSender<gst::Buffer>,
+    ) -> Result<OnAirSubscription, EngineError> {
+        let id = self
+            .program_transport
+            .add_probe(
+                gst::PadProbeType::BUFFER | gst::PadProbeType::BUFFER_LIST,
+                move |_, info| {
+                    if let Some(buffer) = info.buffer() {
+                        let _ = sender.try_send(buffer.to_owned());
+                    } else if let Some(list) = info.buffer_list() {
+                        for buffer in list.iter() {
+                            let _ = sender.try_send(buffer.to_owned());
+                        }
+                    }
+                    gst::PadProbeReturn::Ok
+                },
+            )
+            .ok_or_else(|| {
+                EngineError::Pipeline("could not observe encoded program transport".into())
+            })?;
+        Ok(OnAirSubscription {
+            pad: self.program_transport.clone(),
+            id: Some(id),
+        })
+    }
+
     pub fn start_udp(destination: SocketAddr) -> Result<Self, EngineError> {
         Self::start_udp_with_profile(destination, OutputProfileId::default())
     }
@@ -1222,8 +1265,16 @@ impl PersistentPlayout {
             .map(|branch| Arc::clone(&branch.recording_capture_ingress))
             .collect();
         let output_variant_count = loudness_variants.len();
+        let program_transport = loudness_variants[output_branches[0].variant_index]
+            .mux
+            .static_pad("src")
+            .ok_or(EngineError::MissingPad {
+                element: "program-transport",
+                pad: "src",
+            })?;
         let playout = Self {
             pipeline,
+            program_transport,
             video_selector,
             video_fallback_pad: fallback_pad,
             video_program_pad: program_pad,

@@ -8,6 +8,7 @@ publish.workspace = true
 test-injection = []
 
 [dependencies]
+tempfile = "=3.27.0"
 station-secrets.workspace = true
 libsqlite3-sys = { version = "=0.40.0", features = ["bundled"] }
 getrandom.workspace = true

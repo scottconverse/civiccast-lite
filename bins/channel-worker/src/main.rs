@@ -1,3 +1,4 @@
+mod on_air_publisher;
 mod youtube_publish_worker;
 
 use std::collections::HashMap;
@@ -150,6 +151,18 @@ impl LiveBufferHealth {
 }
 
 fn main() {
+    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("--on-air-publisher")) {
+        std::panic::set_hook(Box::new(|_| {}));
+        let args: Vec<_> = std::env::args_os().skip(2).collect();
+        if args.len() != 2 {
+            std::process::exit(2);
+        }
+        let result = on_air_publisher::run(
+            args[0].to_str().unwrap_or(""),
+            std::path::Path::new(&args[1]),
+        );
+        std::process::exit(if result.is_ok() { 0 } else { 1 });
+    }
     if std::env::args_os()
         .nth(1)
         .is_some_and(|argument| argument == "--youtube-publish-worker")
@@ -422,6 +435,11 @@ fn main() {
         .unwrap_or_else(|error| fatal(8, "start its fallback graph", &format!("{error:?}"))),
     );
 
+    let mut publishers = on_air_publisher::Publishers::attach(
+        media.as_ref().expect("started playout"),
+        &managed_data_root,
+        &channel_id,
+    );
     record_and_emit(
         &mut journal,
         &mut pipe,
@@ -439,6 +457,7 @@ fn main() {
     let mut fallback_tone: Option<ActiveFallbackTone> = None;
 
     loop {
+        publishers.refresh(media.as_ref().expect("running playout"));
         let now = started.elapsed().as_millis() as u64;
         if let Some(event) = expire_fallback_tone_if_due(
             &mut journal,
@@ -629,6 +648,7 @@ fn main() {
         }
     }
 
+    drop(publishers);
     if let Some(media) = media.take() {
         media.stop().unwrap_or_else(|error| {
             fatal(

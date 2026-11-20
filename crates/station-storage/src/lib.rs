@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 extern crate self as station_storage;
 
 mod agenda_authority;
+mod distribution;
 mod automation_execution_authority;
 mod automation_summary_authority;
 pub use agenda_authority::{AgendaHistoryEntry, AgendaWriteError};

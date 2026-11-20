@@ -2493,6 +2493,11 @@ impl Api {
             {
                 self.read_transport_target(path, actor)
             }
+            ("GET" | "PUT", path)
+                if path.starts_with("/api/v1/channels/") && path.ends_with("/distribution") =>
+            {
+                self.channel_distribution(method, path, body, actor)
+            }
             ("PUT", path)
                 if path.starts_with("/api/v1/channels/") && path.ends_with("/transport-target") =>
             {
@@ -7962,6 +7967,34 @@ impl Api {
             Err(CaptionTrackWriteError::Storage(message)) => {
                 error_response(500, "storage_error", &message)
             }
+        }
+    }
+
+    fn channel_distribution(&self, method: &str, path: &str, body: Option<&[u8]>, actor: Option<&OperatorAccount>) -> ApiResponse {
+        if !actor.is_some_and(|a|a.enabled() && a.roles().contains(&station_auth::OperatorRole::SetupAdmin)) {
+            return error_response(403, "setup_admin_required", "Channel distribution requires the Setup Admin role.");
+        }
+        let Some(channel) = path_identity(path, "/api/v1/channels/", "/distribution") else {
+            return error_response(400, "invalid_channel", "Invalid distribution channel.");
+        };
+        if method == "PUT" {
+            #[derive(serde::Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Change { enabled: bool, rtmp_url: Option<String> }
+            let Some(change) = parse_body::<Change>(body) else {
+                return error_response(400, "invalid_distribution", "Supply enabled and an RTMP or RTMPS destination when enabling.");
+            };
+            let url = change.rtmp_url.map(zeroize::Zeroizing::new);
+            if change.enabled != url.is_some() {
+                return error_response(400,"invalid_distribution","A destination is required only when enabling the publisher.");
+            }
+            if let Err(e) = self.storage.set_on_air_rtmp(channel,url.as_ref().map(|s|s.as_str())) {
+                return error_response(400,"distribution_write_failed",&e);
+            }
+        }
+        match self.storage.on_air_rtmp_configured(channel) {
+            Ok(configured) => json_response(200,serde_json::to_vec(&serde_json::json!({"channel_id":channel,"rtmp_configured":configured})).expect("serializable status")),
+            Err(e) => error_response(400,"distribution_read_failed",&e),
         }
     }
 

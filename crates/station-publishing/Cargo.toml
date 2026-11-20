@@ -6,3 +6,5 @@ publish.workspace = true
 
 [dependencies]
 serde.workspace = true
+
+url = "=2.5.8"

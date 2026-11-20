@@ -130,9 +130,11 @@ dependencies = [
  "station-media-journal",
  "station-media-protocol",
  "station-orchestration",
+ "station-publishing",
  "station-readiness",
  "station-runtime",
  "station-schedule",
+ "station-secrets",
  "station-storage",
  "station-windows-ipc",
  "tempfile",
@@ -1824,6 +1826,7 @@ dependencies = [
  "station-update",
  "station-update-coordinator",
  "windows-sys 0.61.2",
+ "zeroize",
  "zip",
 ]
 
@@ -2082,6 +2085,7 @@ name = "station-publishing"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "url",
 ]
 
 [[package]]
@@ -2195,6 +2199,7 @@ dependencies = [
  "station-update",
  "station-windows-ipc",
  "subtle",
+ "tempfile",
  "ureq",
  "windows-sys 0.61.2",
  "zeroize",
