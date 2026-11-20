@@ -1,0 +1,49 @@
+name: Windows Rust kernel
+on:
+  pull_request:
+    paths: ["crates/**", "Cargo.toml", "Cargo.lock", ".cargo/**", "scripts/invoke-cargo.ps1", ".github/workflows/windows-kernel.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  kernel:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.97.1'
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache pinned GStreamer toolchain
+        id: gst-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/gstreamer
+          key: windows-gstreamer-msvc-full-1.28.6
+      - name: Install official GStreamer runtime and development files
+        if: steps.gst-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'gstreamer.exe'
+          Invoke-WebRequest 'https://gstreamer.freedesktop.org/data/pkg/windows/1.28.6/msvc/gstreamer-1.0-msvc-x86_64-1.28.6.exe' -OutFile $installer
+          if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant() -ne '059251444d1267b486eba390b18d25fed87e10315e72f757ec6c7e912fa746b5') { throw 'GStreamer hash mismatch.' }
+          $destination = Join-Path $env:RUNNER_TEMP 'gstreamer'
+          $process = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT','/NORESTART',('/DIR="' + $destination + '"')) -WindowStyle Hidden -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "GStreamer install failed: $($process.ExitCode)" }
+      - name: Configure native build dependencies
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'gstreamer'
+          if (-not (Test-Path "$root/include/gstreamer-1.0/gst/gst.h")) { throw 'GStreamer development headers missing.' }
+          choco install pkgconfiglite --no-progress -y
+          if ($LASTEXITCODE -ne 0) { throw 'pkg-config installation failed.' }
+          "TOWNLIGHT_GSTREAMER_ROOT=$root" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "PKG_CONFIG_PATH=$root/lib/pkgconfig" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "LIB=$root/lib;$env:LIB" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Test complete Rust workspace through required safe launcher
+        shell: powershell
+        run: ./scripts/invoke-cargo.ps1 test --workspace --locked
