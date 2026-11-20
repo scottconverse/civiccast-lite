@@ -33,6 +33,7 @@ Windows run https://github.com/townlight/station/actions/runs/44679958123 failed
 - `station-media-journal --test durable_journal`: compaction, replay, corruption.
 - `station-storage --test asrun_epg_authority`: compaction and projections.
 
+Current tracking: https://github.com/scottconverse/civiccast-lab/issues/1 .
 Original issue: https://github.com/townlight/station/issues/29 . Diagnose these
 specific failures without weakening assertions or rerunning unrelated passed work.
 No installer, runtime or full suite was executed for this repository separation.
