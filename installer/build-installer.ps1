@@ -64,7 +64,7 @@ $expectedRustcPath = Join-Path $expectedRustToolchainRoot 'bin\rustc.exe'
 $expectedGStreamerRoot = Join-Path $trustedLocalAppData 'Programs\gstreamer\1.0\msvc_x86_64'
 $expectedGStreamerVersion = '1.28.6'
 $expectedMsvcRoot = 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207'
-$expectedMsvcVersion = '14.44.35228.0'
+$expectedMsvcVersion = '14.44.35229.0'
 $expectedWindowsSdkRoot = 'C:\Program Files (x86)\Windows Kits\10'
 $expectedWindowsSdkVersion = '10.0.26100.0'
 
