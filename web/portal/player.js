@@ -1,0 +1,71 @@
+"use strict";
+const select = document.querySelector("#channel");
+const video = document.querySelector("video");
+const status = document.querySelector("#status");
+const requested = () => new URL(location.href).searchParams.get("channel");
+let player;
+let timer;
+let active;
+function tune(id) {
+  clearTimeout(timer);
+  if (player) player.destroy();
+  player = undefined;
+  active = id;
+  video.pause();
+  video.removeAttribute("src");
+  video.load();
+  if (!id) return;
+  select.value = id;
+  const url = "./" + encodeURIComponent(id) + "/live.m3u8";
+  status.textContent = "Connecting to " + select.selectedOptions[0].textContent + "…";
+  if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    video.src = url;
+  } else if (window.Hls && Hls.isSupported()) {
+    player = new Hls();
+    player.on(Hls.Events.ERROR, (_, data) => { if (data.fatal) reconnect(); });
+    player.loadSource(url);
+    player.attachMedia(video);
+  } else {
+    status.textContent = "This browser cannot play the station’s live video.";
+  }
+}
+function reconnect() {
+  if (!active) return;
+  status.textContent = "Waiting for the channel to reconnect…";
+  clearTimeout(timer);
+  timer = setTimeout(() => tune(active), 3500);
+}
+video.addEventListener("error", reconnect);
+video.addEventListener("playing", () => { status.textContent = select.selectedOptions[0]?.textContent || ""; });
+video.addEventListener("canplay", () => {
+  if (video.paused) status.textContent = "Press play to watch " + select.selectedOptions[0]?.textContent + ".";
+});
+select.addEventListener("change", () => {
+  const url = new URL(location.href);
+  url.searchParams.set("channel", select.value);
+  history.pushState({}, "", url);
+  tune(select.value);
+});
+async function refresh() {
+  try {
+    const response = await fetch("./channels.json", {cache:"no-store"});
+    if (!response.ok) throw Error();
+    const channels = await response.json();
+    const selected = requested() || active || channels[0]?.id;
+    select.replaceChildren(...channels.map(c => new Option(c.name, c.id)));
+    select.disabled = !channels.length;
+    if (channels.some(c => c.id === selected)) {
+      select.value = selected;
+      if (selected !== active) tune(selected);
+    } else {
+      tune(null);
+      select.selectedIndex = -1;
+      status.textContent = channels.length ? "This channel is unavailable. Choose another channel." : "No channels are on air.";
+    }
+  } catch {
+    if (!active) status.textContent = "The channel list is unavailable. Retrying…";
+  }
+}
+window.addEventListener("popstate", refresh);
+async function poll() { await refresh(); setTimeout(poll, 15000); }
+poll();

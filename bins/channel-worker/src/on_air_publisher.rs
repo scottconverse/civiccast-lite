@@ -65,13 +65,10 @@ pub(super) struct Publishers {
 
 impl Publishers {
     pub fn attach(media: &PersistentPlayout, data: &Path, channel: &str) -> Self {
-        let portal = std::env::var_os("CIVICCAST_PORTAL_ROOT").and_then(|root| {
-            start(
-                media,
-                Destination::Portal,
-                PathBuf::from(root).join(channel),
-            )
-        });
+        let portal = station_publishing::portal_root(data)
+            .ok()
+            .flatten()
+            .and_then(|root| start(media, Destination::Portal, root.join(channel)));
         Self {
             _portal: portal,
             rtmp: None,

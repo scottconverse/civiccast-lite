@@ -2053,6 +2053,7 @@ dependencies = [
  "station-media-assets",
  "station-media-journal",
  "station-media-protocol",
+ "station-publishing",
  "station-readiness",
  "station-recording",
  "station-runtime",
@@ -2060,6 +2061,7 @@ dependencies = [
  "station-schedule-automation",
  "station-storage",
  "station-windows-ipc",
+ "tempfile",
  "windows-sys 0.61.2",
 ]
 

@@ -1,3 +1,4 @@
+mod portal;
 #[cfg(unix)]
 mod recording_unix;
 #[cfg(unix)]
@@ -11,9 +12,9 @@ use scheduled_recording_controller::{
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
-use std::fs::{self, File};
 #[cfg(windows)]
 use std::fs::OpenOptions;
+use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::num::NonZeroU16;
 #[cfg(windows)]
@@ -5198,6 +5199,12 @@ where
             "could not create channel journal directory: {error}"
         ))
     })?;
+    let mut portal = portal::Portal::open(journal_root.parent().unwrap_or(Path::new(".")))
+        .unwrap_or_else(|error| {
+            eprintln!("Public portal unavailable: {error}");
+            None
+        });
+    let mut last_portal_error = None;
     let mut controllers: HashMap<String, ChannelController> = HashMap::new();
     let mut cg_states: HashMap<String, CgSnapshotState> = HashMap::new();
     let mut restart_attempts: HashMap<String, u32> = HashMap::new();
@@ -5207,6 +5214,15 @@ where
         let now = system_time_millis()?;
         let store = StationStore::open(database_path).map_err(OrchestrationError::Storage)?;
         let channels = store.list_channels().map_err(OrchestrationError::Storage)?;
+        if let Some(portal) = &mut portal {
+            let error = portal.publish(&channels).err();
+            if error != last_portal_error {
+                if let Some(detail) = &error {
+                    eprintln!("Public portal update failed: {detail}");
+                }
+                last_portal_error = error;
+            }
+        }
         for channel in channels.iter().filter(|channel| !channel.enabled) {
             fail_active_takeover(
                 &store,

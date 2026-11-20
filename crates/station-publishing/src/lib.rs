@@ -715,3 +715,34 @@ pub fn validate_on_air_rtmp(value: &str) -> Result<(), String> {
     }
     Ok(())
 }
+/// Resolve the operator's dedicated static site directory against the private station tree.
+pub fn portal_root(data: &std::path::Path) -> Result<Option<std::path::PathBuf>, String> {
+    let Some(value) = std::env::var_os("CIVICCAST_PORTAL_ROOT") else {
+        return Ok(None);
+    };
+    let root = std::path::PathBuf::from(value);
+    if !root.is_absolute() {
+        return Err("portal root must be absolute".into());
+    }
+    let data = data.canonicalize().map_err(|e| e.to_string())?;
+    let parent = root
+        .parent()
+        .ok_or("portal requires a dedicated directory")?
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+    let root = parent.join(root.file_name().ok_or("invalid portal directory")?);
+    if root.starts_with(&data) || data.starts_with(&root) {
+        return Err("portal and private station directories must be separate".into());
+    }
+    match std::fs::create_dir(&root) {
+        Ok(()) => (),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => (),
+        Err(e) => return Err(e.to_string()),
+    }
+    if !std::fs::symlink_metadata(&root).is_ok_and(|m| m.is_dir())
+        || root.canonicalize().map_err(|e| e.to_string())? != root
+    {
+        return Err("invalid portal directory".into());
+    }
+    Ok(Some(root))
+}
