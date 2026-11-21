@@ -2003,7 +2003,8 @@ impl PersistentPlayout {
                 return Err(EngineError::State(error.to_string()));
             }
         }
-        if let Err(error) = wait_for_live_decode(&candidate, Duration::from_secs(5)) {
+        // Joining a running transport can require waiting for its next video keyframe.
+        if let Err(error) = wait_for_live_decode(&candidate, Duration::from_secs(12)) {
             remove_live_program(
                 &self.pipeline,
                 &self.video_selector,

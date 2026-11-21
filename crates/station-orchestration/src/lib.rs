@@ -3302,7 +3302,8 @@ impl ChannelController {
                     input,
                     arm_token: arm_token.clone(),
                 },
-                self.command_timeout,
+                // Allow time for the initial keyframe and the worker response.
+                self.command_timeout.max(Duration::from_secs(18)),
             )
             .map_err(OrchestrationError::Worker)?;
         if !matches!(
