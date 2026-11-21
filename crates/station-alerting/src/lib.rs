@@ -206,6 +206,39 @@ pub fn run_system_self_test(
     )
 }
 
+fn self_test_executable_path(application_directory: &Path, executable: &str) -> std::path::PathBuf {
+    application_directory.join(format!("{executable}{}", std::env::consts::EXE_SUFFIX))
+}
+
+fn self_test_private_media_runtime_path(application_directory: &Path) -> std::path::PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        let install_root = application_directory
+            .parent()
+            .filter(|parent| parent.file_name().and_then(|name| name.to_str()) == Some("slots"))
+            .filter(|_| {
+                application_directory
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with("slot-"))
+            })
+            .and_then(|slots| slots.parent())
+            .unwrap_or(application_directory);
+        install_root.join("runtime/gstreamer/bin/gstreamer-1.0-0.dll")
+    }
+    #[cfg(target_os = "macos")]
+    {
+        application_directory
+            .parent()
+            .unwrap_or(application_directory)
+            .join("media/lib/libgstreamer-1.0.0.dylib")
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        application_directory.join("runtime/gstreamer/lib/libgstreamer-1.0.so.0")
+    }
+}
+
 pub fn run_system_self_test_at(
     database_path: &Path,
     kind: SelfTestKind,
@@ -235,17 +268,15 @@ pub fn run_system_self_test_at(
     );
     checks.insert(
         "station_service_binary".into(),
-        application_directory.join("stationd.exe").is_file(),
+        self_test_executable_path(application_directory, "stationd").is_file(),
     );
     checks.insert(
         "channel_worker_binary".into(),
-        application_directory.join("channel-worker.exe").is_file(),
+        self_test_executable_path(application_directory, "channel-worker").is_file(),
     );
     checks.insert(
         "private_media_runtime".into(),
-        application_directory
-            .join("runtime/gstreamer/bin/gstreamer-1.0-0.dll")
-            .is_file(),
+        self_test_private_media_runtime_path(application_directory).is_file(),
     );
     checks.insert(
         "station_profile_configured".into(),

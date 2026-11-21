@@ -24,15 +24,69 @@ fn root() -> PathBuf {
     std::env::temp_dir().join(format!("townlight-system-self-test-{nonce}"))
 }
 
-fn build_healthy_station(root: &Path, now: i64) -> PathBuf {
-    fs::create_dir_all(root.join("runtime/gstreamer/bin")).unwrap();
-    fs::write(root.join("stationd.exe"), b"station-service").unwrap();
-    fs::write(root.join("channel-worker.exe"), b"station-worker").unwrap();
+fn test_executable_name(name: &str) -> String {
+    format!("{name}{}", std::env::consts::EXE_SUFFIX)
+}
+
+fn application_directory(root: &Path) -> PathBuf {
+    #[cfg(target_os = "macos")]
+    {
+        root.join("app/bin")
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        root.to_path_buf()
+    }
+}
+
+fn write_required_artifacts(root: &Path) {
+    let app_directory = application_directory(root);
+    fs::create_dir_all(&app_directory).unwrap();
     fs::write(
-        root.join("runtime/gstreamer/bin/gstreamer-1.0-0.dll"),
-        b"media-runtime",
+        app_directory.join(test_executable_name("stationd")),
+        b"station-service",
     )
     .unwrap();
+    fs::write(
+        app_directory.join(test_executable_name("channel-worker")),
+        b"station-worker",
+    )
+    .unwrap();
+
+    #[cfg(target_os = "windows")]
+    {
+        fs::create_dir_all(app_directory.join("runtime/gstreamer/bin")).unwrap();
+        fs::write(
+            app_directory.join("runtime/gstreamer/bin/gstreamer-1.0-0.dll"),
+            b"media-runtime",
+        )
+        .unwrap();
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let media_directory = root.join("app/media/lib");
+        fs::create_dir_all(&media_directory).unwrap();
+        fs::write(
+            media_directory.join("libgstreamer-1.0.0.dylib"),
+            b"media-runtime",
+        )
+        .unwrap();
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        fs::create_dir_all(app_directory.join("runtime/gstreamer/lib")).unwrap();
+        fs::write(
+            app_directory.join("runtime/gstreamer/lib/libgstreamer-1.0.so.0"),
+            b"media-runtime",
+        )
+        .unwrap();
+    }
+}
+
+fn build_healthy_station(root: &Path, now: i64) -> PathBuf {
+    write_required_artifacts(root);
     let database = root.join("data/station.db");
     fs::create_dir_all(database.parent().unwrap()).unwrap();
     let store = StationStore::open(&database).unwrap();
@@ -102,13 +156,14 @@ fn runs_real_daily_checks_persists_evidence_and_classifies_an_healthy_station_pa
     )
     .unwrap();
     let database = build_healthy_station(&root, now);
+    let app_directory = application_directory(&root);
     let record = run_system_self_test_at(
         &database,
         SelfTestKind::Daily,
         SelfTestTrigger::Manual,
         None,
         now,
-        &root,
+        &app_directory,
     )
     .unwrap();
     assert_eq!(record.status, SelfTestStatus::Pass);
@@ -166,12 +221,13 @@ fn runs_each_due_local_period_exactly_once_across_repeated_scheduler_ticks() {
         hour: 2,
         minute: 1,
     };
-    let first = run_due_system_self_tests_at(&database, now, local, &root).unwrap();
+    let app_directory = application_directory(&root);
+    let first = run_due_system_self_tests_at(&database, now, local, &app_directory).unwrap();
     assert_eq!(first.len(), 1);
     assert_eq!(first[0].trigger, SelfTestTrigger::Scheduled);
     assert_eq!(first[0].schedule_period_key.as_deref(), Some("2026-08-21"));
     assert!(
-        run_due_system_self_tests_at(&database, now + 1_000, local, &root)
+        run_due_system_self_tests_at(&database, now + 1_000, local, &app_directory)
             .unwrap()
             .is_empty()
     );
@@ -241,13 +297,14 @@ fn a_core_failure_fires_one_rule_owned_alert_and_recovery_resolves_it() {
             .as_millis(),
     )
     .unwrap();
+    let app_directory = application_directory(&root);
     let failed = run_system_self_test_at(
         &database,
         SelfTestKind::Daily,
         SelfTestTrigger::Manual,
         None,
         now,
-        &root,
+        &app_directory,
     )
     .unwrap();
     assert_eq!(failed.status, SelfTestStatus::Fail);
@@ -258,21 +315,14 @@ fn a_core_failure_fires_one_rule_owned_alert_and_recovery_resolves_it() {
     assert_eq!(alerts[0].state, AlertEventState::Firing);
     drop(store);
 
-    fs::create_dir_all(root.join("runtime/gstreamer/bin")).unwrap();
-    fs::write(root.join("stationd.exe"), b"station-service").unwrap();
-    fs::write(root.join("channel-worker.exe"), b"station-worker").unwrap();
-    fs::write(
-        root.join("runtime/gstreamer/bin/gstreamer-1.0-0.dll"),
-        b"media-runtime",
-    )
-    .unwrap();
+    write_required_artifacts(&root);
     let recovered = run_system_self_test_at(
         &database,
         SelfTestKind::Daily,
         SelfTestTrigger::Manual,
         None,
         now + 1_000,
-        &root,
+        &app_directory,
     )
     .unwrap();
     assert_eq!(recovered.status, SelfTestStatus::Warn);
@@ -282,5 +332,67 @@ fn a_core_failure_fires_one_rule_owned_alert_and_recovery_resolves_it() {
         .unwrap();
     assert_eq!(resolved.len(), 1);
     assert_eq!(resolved[0].state, AlertEventState::Resolved);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn active_slot_self_test_uses_install_runtime_and_requires_real_library() {
+    let root = root();
+    let now = i64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis(),
+    )
+    .unwrap();
+    let database = build_healthy_station(&root, now);
+    let slot = root.join("slots/slot-1.2.3-abc");
+    fs::create_dir_all(&slot).unwrap();
+    fs::write(
+        slot.join(test_executable_name("stationd")),
+        b"station-service",
+    )
+    .unwrap();
+    fs::write(
+        slot.join(test_executable_name("channel-worker")),
+        b"station-worker",
+    )
+    .unwrap();
+    fs::create_dir_all(slot.join("runtime/gstreamer/bin")).unwrap();
+    fs::write(
+        slot.join("runtime/gstreamer/bin/gstreamer-1.0-0.dll"),
+        b"slot-runtime",
+    )
+    .unwrap();
+    fs::remove_file(root.join("runtime/gstreamer/bin/gstreamer-1.0-0.dll")).unwrap();
+
+    let missing = run_system_self_test_at(
+        &database,
+        SelfTestKind::Daily,
+        SelfTestTrigger::Manual,
+        None,
+        now,
+        &slot,
+    )
+    .unwrap();
+    assert_eq!(missing.checks.get("private_media_runtime"), Some(&false));
+
+    fs::create_dir_all(root.join("runtime/gstreamer/bin")).unwrap();
+    fs::write(
+        root.join("runtime/gstreamer/bin/gstreamer-1.0-0.dll"),
+        b"media-runtime",
+    )
+    .unwrap();
+    let present = run_system_self_test_at(
+        &database,
+        SelfTestKind::Daily,
+        SelfTestTrigger::Manual,
+        None,
+        now + 1_000,
+        &slot,
+    )
+    .unwrap();
+    assert_eq!(present.checks.get("private_media_runtime"), Some(&true));
     fs::remove_dir_all(root).unwrap();
 }

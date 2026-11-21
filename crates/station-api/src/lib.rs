@@ -2626,7 +2626,7 @@ impl Api {
             ("GET", "/api/v1/system-resources/latest") => self.latest_system_resources(),
             ("GET", "/api/v1/self-tests") => self.list_self_tests(),
             ("POST", path) if path.starts_with("/api/v1/self-tests/run?") => {
-                self.run_self_test(path, actor)
+                self.run_self_test(path)
             }
             ("GET", "/api/v1/self-test-schedules") => self.list_self_test_schedules(),
             ("PUT", path) if path.starts_with("/api/v1/self-test-schedules/") => {
@@ -10396,7 +10396,7 @@ impl Api {
         }
     }
 
-    fn run_self_test(&self, path: &str, actor: Option<&OperatorAccount>) -> ApiResponse {
+    fn run_self_test(&self, path: &str) -> ApiResponse {
         let Some(kind_value) = path.strip_prefix("/api/v1/self-tests/run?kind=") else {
             return error_response(400, "invalid_query", "A self-test kind is required.");
         };
@@ -10419,7 +10419,7 @@ impl Api {
             &self.database_path,
             kind,
             SelfTestTrigger::Manual,
-            actor.map(|account| account.account_id().as_str().to_owned()),
+            None,
             now,
         ) {
             Ok(record) => json_response(

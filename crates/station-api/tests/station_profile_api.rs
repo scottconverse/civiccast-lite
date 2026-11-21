@@ -2223,6 +2223,28 @@ fn bootstrap_session_survives_across_real_tcp_connections() {
     let confirmed = String::from_utf8(http_request_to(address, request.as_bytes())).unwrap();
     assert!(confirmed.starts_with("HTTP/1.1 200 OK\r\n"), "{confirmed}");
 
+    let csrf_value = csrf.strip_prefix("townlight_csrf_v1=").unwrap();
+    let self_test_request_body = b"{}";
+    let self_test_http_request = format!(
+        "POST /api/v1/self-tests/run?kind=daily HTTP/1.1\r\nHost: {address}\r\nOrigin: http://{address}\r\nSec-Fetch-Site: same-origin\r\nX-TownLight-CSRF: {csrf_value}\r\nCookie: {session}; {csrf}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        self_test_request_body.len()
+    );
+    let mut self_test_request_bytes = self_test_http_request.into_bytes();
+    self_test_request_bytes.extend_from_slice(self_test_request_body);
+    let self_test_response =
+        String::from_utf8(http_request_to(address, &self_test_request_bytes)).unwrap();
+    assert!(
+        self_test_response.starts_with("HTTP/1.1 201 Created\r\n"),
+        "{self_test_response}"
+    );
+    let self_test_payload = self_test_response
+        .split_once("\r\n\r\n")
+        .map(|(_, body)| body)
+        .unwrap();
+    let self_test: SystemSelfTest = serde_json::from_str(self_test_payload).unwrap();
+    assert!(matches!(self_test.trigger, SelfTestTrigger::Manual));
+    assert!(self_test.schedule_period_key.is_none());
+
     stop.store(true, Ordering::Release);
     assert!(
         finished_rx
