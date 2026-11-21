@@ -3660,9 +3660,10 @@ impl StationStore {
         if current.state != expected {
             return Err("takeover state compare-and-set conflict".into());
         }
-        if current.state != TakeoverState::OnAir
-            && current.state != TakeoverState::ReturnRequested
-            && occurred_at_unix_ms >= current.expires_at_unix_ms
+        if matches!(
+            current.state,
+            TakeoverState::Arming | TakeoverState::Armed | TakeoverState::TakeRequested
+        ) && occurred_at_unix_ms >= current.expires_at_unix_ms
             && next != TakeoverState::Failed
         {
             return Err("takeover intent has expired".into());

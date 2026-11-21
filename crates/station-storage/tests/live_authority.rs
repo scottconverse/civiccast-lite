@@ -132,7 +132,7 @@ fn persists_revisioned_channel_scoped_source_and_cas_takeover_audit() {
             &session.session_id,
             TakeoverState::OnAir,
             TakeoverState::ReturnRequested,
-            5_000,
+            65_000,
             None,
             "operator-scott",
             4,
@@ -144,7 +144,7 @@ fn persists_revisioned_channel_scoped_source_and_cas_takeover_audit() {
             &session.session_id,
             TakeoverState::ReturnRequested,
             TakeoverState::Returning,
-            6_000,
+            66_000,
             None,
             "stationd",
             5,
@@ -155,21 +155,21 @@ fn persists_revisioned_channel_scoped_source_and_cas_takeover_audit() {
             &session.session_id,
             TakeoverState::Returning,
             TakeoverState::Completed,
-            7_000,
+            67_000,
             None,
             "stationd",
             6,
         )
         .unwrap();
-    assert_eq!(completed.returned_at_unix_ms, Some(7_000));
+    assert_eq!(completed.returned_at_unix_ms, Some(67_000));
     assert_eq!(store.read_takeover_authority_revision(CHANNEL).unwrap(), 7);
     assert!(store.read_active_takeover(CHANNEL).unwrap().is_none());
 
     let next_session = TakeoverSession {
         session_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc".into(),
         authority_revision: 8,
-        requested_at_unix_ms: 8_000,
-        expires_at_unix_ms: 68_000,
+        requested_at_unix_ms: 68_000,
+        expires_at_unix_ms: 128_000,
         ..session.clone()
     };
     store.request_takeover(&next_session, 7).unwrap();

@@ -1160,7 +1160,7 @@ fn long_live_takeover_hands_back_to_the_schedule_item_valid_now() {
                 operator_id: "operator-test".into(),
                 reason: Some("Live council meeting".into()),
                 requested_at_unix_ms: starts_at + 100,
-                expires_at_unix_ms: starts_at + 180_100,
+                expires_at_unix_ms: starts_at + 30_000,
                 taken_at_unix_ms: None,
                 returned_at_unix_ms: None,
                 state: TakeoverState::Arming,
