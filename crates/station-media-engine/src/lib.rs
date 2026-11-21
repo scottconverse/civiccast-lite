@@ -2552,7 +2552,24 @@ fn install_live_program(
 
     let video_decode_queue = element("queue", name("video-decode-queue"))?;
     let video_parse = element("h264parse", name("video-parse"))?;
-    let video_decode = element("openh264dec", name("video-decode"))?;
+    let decoder_factory = match std::env::var("TOWNLIGHT_VIDEO_DECODER") {
+        Ok(value) => match value.as_str() {
+            "openh264dec" => "openh264dec",
+            "d3d11h264dec" if cfg!(windows) => "d3d11h264dec",
+            other => {
+                return Err(EngineError::State(format!(
+                    "unsupported TOWNLIGHT_VIDEO_DECODER={other}"
+                )));
+            }
+        },
+        Err(std::env::VarError::NotPresent) => "openh264dec",
+        Err(std::env::VarError::NotUnicode(_)) => {
+            return Err(EngineError::State(
+                "TOWNLIGHT_VIDEO_DECODER is not valid Unicode".into(),
+            ));
+        }
+    };
+    let video_decode = element(decoder_factory, name("video-decode"))?;
     let video_convert = element("videoconvert", name("video-convert"))?;
     let video_scale = element("videoscale", name("video-scale"))?;
     let video_rate = gst::ElementFactory::make("videorate")
