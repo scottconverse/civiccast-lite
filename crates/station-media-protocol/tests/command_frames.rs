@@ -9,6 +9,9 @@ use station_media_protocol::{
 };
 use std::num::NonZeroU16;
 
+mod common;
+use common::test_managed_root;
+
 fn live_input() -> LiveInputConfiguration {
     LiveInputConfiguration::new(
         "62a47b7e-2a03-48d6-8703-a6e5ce986527".into(),
@@ -482,8 +485,8 @@ fn round_trips_private_worker_bootstrap_without_process_arguments() {
         worker_id: "ae819b97-2920-434b-9d96-0b51a8ea9abb".into(),
         channel_id: "62a47b7e-2a03-48d6-8703-a6e5ce986527".into(),
         output_profile: "atsc-720p5994".into(),
-        cg_image_root: r"C:\ProgramData\TownLight Station\cg-images".into(),
-        proof_artifact_root: r"C:\ProgramData\TownLight Station\output-proofs".into(),
+        cg_image_root: test_managed_root(&["cg-images"]),
+        proof_artifact_root: test_managed_root(&["output-proofs"]),
         fallback_slate: Some(WorkerFallbackSlate {
             asset_id: "a".repeat(64),
             format: CgImageFormat::Png,
@@ -529,8 +532,8 @@ fn bootstrap_rejects_invalid_caption_policy() {
         worker_id: "worker".into(),
         channel_id: "channel".into(),
         output_profile: "proof-360p30".into(),
-        cg_image_root: r"C:\ProgramData\TownLight Station\cg-images".into(),
-        proof_artifact_root: r"C:\ProgramData\TownLight Station\output-proofs".into(),
+        cg_image_root: test_managed_root(&["cg-images"]),
+        proof_artifact_root: test_managed_root(&["output-proofs"]),
         fallback_slate: None,
         caption_policy: Some(WorkerCaptionPolicy {
             mode: WorkerCaptionMode::Cea708,
@@ -596,8 +599,8 @@ fn bootstrap_rejects_a_noncanonical_fallback_slate_identity() {
         worker_id: "worker".into(),
         channel_id: "channel".into(),
         output_profile: "proof-360p30".into(),
-        cg_image_root: r"C:\ProgramData\TownLight Station\cg-images".into(),
-        proof_artifact_root: r"C:\ProgramData\TownLight Station\output-proofs".into(),
+        cg_image_root: test_managed_root(&["cg-images"]),
+        proof_artifact_root: test_managed_root(&["output-proofs"]),
         fallback_slate: Some(WorkerFallbackSlate {
             asset_id: "A".repeat(64),
             format: CgImageFormat::Png,
@@ -614,9 +617,9 @@ fn bootstrap_rejects_a_noncanonical_fallback_slate_identity() {
 #[test]
 fn bootstrap_rejects_relative_traversing_or_wrong_managed_image_roots() {
     for root in [
-        "cg-images",
-        r"C:\ProgramData\TownLight Station\..\cg-images",
-        r"C:\ProgramData\TownLight Station\images",
+        "cg-images".to_string(),
+        test_managed_root(&["..", "cg-images"]),
+        test_managed_root(&["images"]),
     ] {
         let bootstrap = WorkerBootstrapEnvelope {
             version: PROTOCOL_VERSION,
@@ -624,7 +627,7 @@ fn bootstrap_rejects_relative_traversing_or_wrong_managed_image_roots() {
             channel_id: "channel".into(),
             output_profile: "profile".into(),
             cg_image_root: root.into(),
-            proof_artifact_root: r"C:\ProgramData\TownLight Station\output-proofs".into(),
+            proof_artifact_root: test_managed_root(&["output-proofs"]),
             fallback_slate: None,
             caption_policy: None,
             outputs: Vec::new(),

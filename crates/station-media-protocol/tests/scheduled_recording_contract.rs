@@ -6,6 +6,9 @@ use station_media_protocol::{
     encode_command_frame, encode_event_frame,
 };
 
+mod common;
+use common::test_managed_root;
+
 const RECORDING_ID: &str = "11111111-2222-4333-8444-555555555555";
 const SINK_ID: &str = "22222222-3333-4444-8555-666666666666";
 const HASH: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -149,8 +152,8 @@ fn scheduled_recording_start_must_bind_the_exact_bootstrap_output() {
         worker_id: "worker-a".into(),
         channel_id: "channel-1".into(),
         output_profile: "proof-360p30".into(),
-        cg_image_root: r"C:\ProgramData\TownLight Station\cg-images".into(),
-        proof_artifact_root: r"C:\ProgramData\TownLight Station\output-proofs".into(),
+        cg_image_root: test_managed_root(&["cg-images"]).into(),
+        proof_artifact_root: test_managed_root(&["output-proofs"]).into(),
         fallback_slate: None,
         caption_policy: None,
         outputs: vec![WorkerOutputConfiguration::UdpTs {

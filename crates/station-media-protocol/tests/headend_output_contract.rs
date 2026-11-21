@@ -4,6 +4,9 @@ use station_media_protocol::{
     encode_bootstrap_frame,
 };
 
+mod common;
+use common::test_managed_root;
+
 const SINK_ID: &str = "11111111-2222-4333-8444-555555555555";
 
 fn bootstrap(
@@ -18,8 +21,8 @@ fn bootstrap(
         worker_id: "worker-a".into(),
         channel_id: "channel-a".into(),
         output_profile: output_profile.into(),
-        cg_image_root: r"C:\ProgramData\TownLight Station\cg-images".into(),
-        proof_artifact_root: r"C:\ProgramData\TownLight Station\output-proofs".into(),
+        cg_image_root: test_managed_root(&["cg-images"]).into(),
+        proof_artifact_root: test_managed_root(&["output-proofs"]).into(),
         fallback_slate: None,
         caption_policy: None,
         outputs: vec![WorkerOutputConfiguration::UdpTs {
