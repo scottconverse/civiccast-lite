@@ -7,6 +7,9 @@ use station_media_protocol::{
     decode_event_frame, encode_bootstrap_frame, encode_command_frame, encode_event_frame,
 };
 
+mod common;
+use common::test_managed_root;
+
 const PROOF_ID: &str = "11111111-2222-4333-8444-555555555555";
 const SINK_ID: &str = "22222222-3333-4444-8555-666666666666";
 const ARTIFACT: &str = "proofs/run-1/output-0.ts";
@@ -230,8 +233,8 @@ fn proof_start_must_bind_sink_and_target_to_bootstrap_output_index() {
         worker_id: "worker-a".into(),
         channel_id: "channel-1".into(),
         output_profile: "proof-360p30".into(),
-        cg_image_root: r"C:\ProgramData\TownLight Station\cg-images".into(),
-        proof_artifact_root: r"C:\ProgramData\TownLight Station\output-proofs".into(),
+        cg_image_root: test_managed_root(&["cg-images"]).into(),
+        proof_artifact_root: test_managed_root(&["output-proofs"]).into(),
         fallback_slate: None,
         caption_policy: None,
         outputs: vec![
@@ -282,16 +285,15 @@ fn bootstrap_rejects_unsafe_managed_proof_roots_and_duplicate_sink_ids() {
         worker_id: "worker-a".into(),
         channel_id: "channel-1".into(),
         output_profile: "proof-360p30".into(),
-        cg_image_root: r"C:\ProgramData\TownLight Station\cg-images".into(),
-        proof_artifact_root: r"C:\ProgramData\TownLight Station\output-proofs\..\output-proofs"
-            .into(),
+        cg_image_root: test_managed_root(&["cg-images"]).into(),
+        proof_artifact_root: test_managed_root(&["output-proofs", "..", "output-proofs"]).into(),
         fallback_slate: None,
         caption_policy: None,
         outputs: Vec::new(),
     };
     assert!(encode_bootstrap_frame(&bootstrap).is_err());
 
-    bootstrap.proof_artifact_root = r"C:\ProgramData\TownLight Station\output-proofs".into();
+    bootstrap.proof_artifact_root = test_managed_root(&["output-proofs"]).into();
     bootstrap.outputs = vec![
         WorkerOutputConfiguration::UdpTs {
             sink_id: SINK_ID.into(),

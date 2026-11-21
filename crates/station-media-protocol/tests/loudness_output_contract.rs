@@ -4,6 +4,9 @@ use station_media_protocol::{
     WorkerEventEnvelope, WorkerOutputConfiguration,
 };
 
+mod common;
+use common::test_managed_root;
+
 const CABLE_TARGET_LUFS: f64 = -24.0;
 const STREAMING_TARGET_LUFS: f64 = -16.0;
 
@@ -13,8 +16,8 @@ fn bootstrap_with_per_sink_targets() -> serde_json::Value {
         "worker_id": "worker-1",
         "channel_id": "channel-1",
         "output_profile": "atsc-720p5994",
-        "cg_image_root": "C:\\ProgramData\\TownLight Station\\cg-images",
-        "proof_artifact_root": "C:\\ProgramData\\TownLight Station\\output-proofs",
+        "cg_image_root": test_managed_root(&["cg-images"]),
+        "proof_artifact_root": test_managed_root(&["output-proofs"]),
         "outputs": [
             {
                 "kind": "udp-ts",
