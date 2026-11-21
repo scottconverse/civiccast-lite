@@ -866,13 +866,46 @@ impl PersistentPlayout {
             .property("config-interval", 1_i32)
             .build()
             .map_err(|error| build_error("h264parse", error))?;
+        let cg_compositor_factory = match std::env::var("TOWNLIGHT_VIDEO_COMPOSITOR") {
+            Ok(value) => match value.as_str() {
+                "compositor" => "compositor",
+                "d3d11compositor" if cfg!(windows) && output_format == "NV12" => "d3d11compositor",
+                "d3d11compositor" if !cfg!(windows) => {
+                    return Err(EngineError::State(
+                        "TOWNLIGHT_VIDEO_COMPOSITOR=d3d11compositor is only supported on Windows"
+                            .into(),
+                    ));
+                }
+                "d3d11compositor" => {
+                    return Err(EngineError::State(format!(
+                        "TOWNLIGHT_VIDEO_COMPOSITOR=d3d11compositor requires NV12 output, got {output_format}"
+                    )));
+                }
+                other => {
+                    return Err(EngineError::State(format!(
+                        "unsupported TOWNLIGHT_VIDEO_COMPOSITOR={other}"
+                    )));
+                }
+            },
+            Err(std::env::VarError::NotPresent) => "compositor",
+            Err(std::env::VarError::NotUnicode(_)) => {
+                return Err(EngineError::State(
+                    "TOWNLIGHT_VIDEO_COMPOSITOR is not valid Unicode".into(),
+                ));
+            }
+        };
+        let cg_input_caps_value = if cg_compositor_factory == "d3d11compositor" {
+            caps.clone()
+        } else {
+            cg_video_caps(profile)?
+        };
         let cg_input_convert = element("videoconvert", "cg-input-convert")?;
         let cg_input_caps = gst::ElementFactory::make("capsfilter")
             .name("cg-input-caps")
-            .property("caps", &cg_video_caps(profile)?)
+            .property("caps", &cg_input_caps_value)
             .build()
             .map_err(|error| build_error("capsfilter", error))?;
-        let cg_compositor = gst::ElementFactory::make("compositor")
+        let cg_compositor = gst::ElementFactory::make(cg_compositor_factory)
             .name("cg-compositor")
             .property("ignore-inactive-pads", true)
             .build()
