@@ -18,13 +18,13 @@ function tune(id) {
   select.value = id;
   const url = "./" + encodeURIComponent(id) + "/live.m3u8";
   status.textContent = "Connecting to " + select.selectedOptions[0].textContent + "…";
-  if (video.canPlayType("application/vnd.apple.mpegurl")) {
-    video.src = url;
-  } else if (window.Hls && Hls.isSupported()) {
+  if (window.Hls && Hls.isSupported()) {
     player = new Hls();
     player.on(Hls.Events.ERROR, (_, data) => { if (data.fatal) reconnect(); });
     player.loadSource(url);
     player.attachMedia(video);
+  } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    video.src = url;
   } else {
     status.textContent = "This browser cannot play the station’s live video.";
   }
