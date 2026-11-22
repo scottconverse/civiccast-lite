@@ -8,7 +8,7 @@ These commands run on compatible build hosts. The Windows GitHub Actions workflo
 
 ## Windows x64
 
-1. Install Rust using [rustup](https://rustup.rs/) and select `rustup toolchain install 1.97.1-x86_64-pc-windows-msvc`. Install Node.js 22.13 or newer in the 22 line, including npm, and a native pkg-config implementation available as `pkg-config.exe` on PATH. The Windows build also rebuilds the console using its npm lockfile.
+1. Install Rust using [rustup](https://rustup.rs/) and select `rustup toolchain install 1.97.1-x86_64-pc-windows-msvc`. Install [Node.js 22](https://nodejs.org/dist/latest-v22.x/), including npm. The reference host used Node.js 22.23.5. The Windows build rebuilds the console using its npm lockfile.
 2. Install [Visual Studio 2022 Build Tools 17.14](https://learn.microsoft.com/en-us/visualstudio/releases/2022/release-history) at the standard Build Tools path. The reference host used 17.14.41 (17.14.37710.0). Choose x64/x86 MSVC v143 14.44 and the Windows SDK 10.0.26100 components (`Microsoft.VisualStudio.Component.VC.14.44.17.14.x86.x64`, `Microsoft.VisualStudio.Component.Windows11SDK.26100`). The packager checks the exact MSVC tool directory `14.44.35207` and compiler file version `14.44.35229.0`.
 3. Install [Inno Setup 6.7.3](https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe) for the current user into `%LOCALAPPDATA%\Programs\Inno Setup 6`. The installer SHA-256 is `9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732`. The packager validates the installed compiler hash, size and Authenticode signer.
 4. Download these exact files into the given subdirectories of `%LOCALAPPDATA%\Temp`. Keep their upstream filenames. Compare the digest with `Get-FileHash -Algorithm SHA256` before using each file.
@@ -19,7 +19,7 @@ These commands run on compatible build hosts. The Windows GitHub Actions workflo
 | [FFmpeg LGPL caption decoder ZIP](https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/ffmpeg-n9.0.1-11-ge47273f4d9-win64-lgpl-9.0.zip) | `TownLightStation-Toolchain-20260831` | `2484854ad6988d34560f4e6ea7a6ecb9dde0af7c229d2591815d056b04ec4f56` |
 | [TSDuck 3.44-4676 portable ZIP](https://github.com/tsduck/tsduck/releases/download/v3.44-4676/TSDuck-Win64-3.44-4676-Portable.zip) | `TownLightStation-Toolchain-20260826` | `b0ca0f963fcd77488b8c32d6f9d85030daa891ed753c36e57bbb458807a44eb1` |
 
-Install GStreamer with the development preset (`/TYPE=devel`) to `%LOCALAPPDATA%\Programs\gstreamer\1.0\msvc_x86_64`. The [Windows workflow](../.github/workflows/windows-kernel.yml) shows the upstream installer's noninteractive options and SDK checks. Set `PKG_CONFIG_PATH` to the SDK's `lib\pkgconfig` for this build shell. From the checkout root, restore the locked dependencies before invoking the offline native build:
+Install GStreamer with the development preset (`/TYPE=devel`) to `%LOCALAPPDATA%\Programs\gstreamer\1.0\msvc_x86_64`. The [Windows workflow](../.github/workflows/windows-kernel.yml) shows the upstream installer's noninteractive options and SDK checks. The SDK supplies `pkg-config.exe` in `bin`, and the wrapper puts it on PATH. Set `PKG_CONFIG_PATH` to the SDK's `lib\pkgconfig` for this build shell. From the checkout root, restore the locked dependencies before invoking the offline native build:
 
 ```powershell
 $env:TOWNLIGHT_CARGO_EXECUTABLE = Join-Path $env:USERPROFILE '.rustup\toolchains\1.97.1-x86_64-pc-windows-msvc\bin\cargo.exe'
@@ -52,7 +52,7 @@ SignedUninstallerDir=C:/path/to/empty/uninstaller-staging
 
 ## macOS arm64
 
-Use an Apple Silicon host with Xcode Command Line Tools, Rust 1.100.0 from rustup, and `pkg-config` available on PATH. The recipe recreates the extracted GStreamer SDK used by the release build. Run from the checkout root with an unused build directory.
+Use an Apple Silicon host with Xcode Command Line Tools and Rust 1.100.0 from rustup. The recipe recreates the extracted GStreamer SDK, including its `pkg-config`, used by the release build. Run from the checkout root.
 
 ```sh
 set -eu
@@ -81,7 +81,7 @@ for sdk in "$runtime" "$devel"; do
         fi
     done
 done
-export PATH="$prefix/bin:$PATH"
+export PATH="$prefix/bin:$HOME/.cargo/bin:$PATH"
 export DYLD_LIBRARY_PATH="$prefix/lib"
 export PKG_CONFIG_PATH="$prefix/lib/pkgconfig:$prefix/share/pkgconfig"
 export GST_PLUGIN_SYSTEM_PATH_1_0="$prefix/lib/gstreamer-1.0"
