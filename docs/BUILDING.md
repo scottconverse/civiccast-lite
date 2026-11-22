@@ -1,6 +1,6 @@
 # Build and package CivicCast Lite from a fresh checkout
 
-Clone `https://github.com/scottconverse/civiccast-lite.git` on a build host for the target platform. Check out the exact commit you intend to ship. The [v0.1.0.12 tag](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.12) is the reference build. Record the commit, toolchain versions and SHA-256 of each package. The names TownLight Station and CivicCast Lab still appear in the packaging and service identifiers.
+Clone `https://github.com/scottconverse/civiccast-lite.git` on a build host for the target platform. Check out the exact revision you intend to build. Record the source commit, toolchain versions and SHA-256 of each package. The names TownLight Station and CivicCast Lab still appear in the packaging and service identifiers.
 
 Git tracks the application, portal, operator console, lockfiles and packaging scripts. Build inputs also come from the tool and library publishers listed below. Station databases, test footage, saved credentials and private update keys are unnecessary for a build.
 
@@ -9,6 +9,8 @@ Git tracks the application, portal, operator console, lockfiles and packaging sc
 Run [Build installers](https://github.com/scottconverse/civiccast-lite/actions/workflows/build-installers.yml) from the branch you want to package. The three jobs check out the same source revision on fresh Windows x64, macOS arm64, and Ubuntu 26.04 amd64 runners. Set the package version for macOS and Ubuntu at dispatch. The Windows job uses the product version in the Inno Setup definition.
 
 Download the three artifacts from the workflow run. Verify the Windows setup SHA-256 against `candidate-manifest.json` and the macOS and Ubuntu packages against their `SHA256SUMS.txt` files. The run page identifies the source commit. These are build candidates. The Windows setup is unsigned, and the release signing procedure remains separate.
+
+Select `use_signed_gstreamer` to embed the exact re-signed Windows GStreamer installer shipped as a [v0.1.0.13 build input](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.13). The Windows SDK installation uses the pinned upstream installer. The workflow verifies the SHA-256 and Authenticode provenance of the redistributable before embedding it.
 
 ## Windows x64
 
@@ -35,12 +37,16 @@ powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File installe
 
 The build emits the candidate setup and `candidate-manifest.json` under `dist`. The manifest records the payload hashes and source commit. If rebuilding the console changes tracked files, commit the intended changes before making the release candidate.
 
+For the signed redistributable, download `gstreamer-1.28.6-windows-x64-civiccast-signed.exe` from `v0.1.0.13` and verify SHA-256 `daf7cf53c5ed1d58b802143d34fea6645d8ac92c3a954e0219d7d3a42b135d4f`. Store it alongside the upstream installer in `%LOCALAPPDATA%\Temp\TownLightStation-Toolchain-20260820`, then pass `-UseSignedGStreamer` to `installer/build-installer.ps1`. The build checks the committed signing receipt and the file's Authenticode signature and timestamp.
+
 ### Windows release signing and assembly
 
 Maintainers use the [CivicCast GitHub signing workflow](https://github.com/scottconverse/civiccast/blob/main/.github/workflows/sign-native-installer.yml) and its existing Azure Trusted Signing configuration. The publisher identity lives in Azure. Release signing needs an authorized GitHub maintainer and access to that workflow. The build host needs no signing key.
 
+The [GStreamer rebuild recipe](GSTREAMER-WINDOWS.md) covers the package used for the Halo check. It signs the Inno setup engine before embedding it, then signs and verifies the outer GStreamer installer. The vendor runtime files remain byte-for-byte unchanged. The Windows Sandbox policy used during testing rejected four unsigned GStreamer runtime DLLs even after the setup engine was accepted. The resulting CivicCast package passed a clean native Windows installation on Halo.
+
 1. Take `stationd.exe`, `channel-worker.exe`, `nas-publisher.exe`, `station-automation-launch-helper.exe` and `station-updater.exe` from the exact candidate build. Match their SHA-256 values to the manifest. Submit the exact files individually through the signer's draft-release intake using `release_tag`, `asset_name` and lowercase `expected_sha256`. Retrieve each `signed-native-installer` artifact and its `signing-receipt.json`. Verify the returned SHA-256, Authenticode publisher and timestamp. Retain the receipts.
-2. Use the ISCC invocation near the end of [build-installer.ps1](../installer/build-installer.ps1) as the compiler define list. Keep the same source commit and pinned third-party inputs. Set the five executable path, SHA-256 and size definitions from the signed files. Extract `bin/ffmpeg.exe` and `LICENSE.txt` from the pinned FFmpeg ZIP and verify their size and hash against the packager. Use a dedicated output directory.
+2. Use the ISCC invocation near the end of [build-installer.ps1](../installer/build-installer.ps1) as the compiler define list. Keep the same source commit and pinned third-party inputs. For `v0.1.0.13`, use the verified signed GStreamer installer and its SHA-256 from the signed-input candidate manifest. Set the five executable path, SHA-256 and size definitions from the signed files. Extract `bin/ffmpeg.exe` and `LICENSE.txt` from the pinned FFmpeg ZIP and verify their size and hash against the packager. Use a dedicated output directory.
 3. Compile with a temporary wrapper that includes the checkout's `installer/TownLightStation.iss`. Replace the two absolute example paths below with paths on the build host.
 
 ```ini

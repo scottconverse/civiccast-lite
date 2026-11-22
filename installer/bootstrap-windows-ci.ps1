@@ -1,5 +1,14 @@
 #!/usr/bin/env pwsh
+param(
+    [switch]$UseSignedGStreamer,
+    [string]$GStreamerInputPath
+)
+
 Set-StrictMode -Version Latest
+
+if (-not $UseSignedGStreamer -and -not [string]::IsNullOrEmpty($GStreamerInputPath)) {
+    throw 'GStreamerInputPath requires -UseSignedGStreamer.'
+}
 $ErrorActionPreference = 'Stop'
 
 if ($env:GITHUB_ACTIONS -ne 'true') { throw 'GITHUB_ACTIONS must be true' }
@@ -41,6 +50,33 @@ function Invoke-Setup {
 # 1. GStreamer
 $gstExe = Join-Path $GstDir 'gstreamer-1.0-msvc-x86_64-1.28.6.exe'
 Download-Pinned 'https://gstreamer.freedesktop.org/data/pkg/windows/1.28.6/msvc/gstreamer-1.0-msvc-x86_64-1.28.6.exe' $gstExe '059251444d1267b486eba390b18d25fed87e10315e72f757ec6c7e912fa746b5'
+if ($UseSignedGStreamer) {
+    . (Join-Path $RepoRoot 'installer\gstreamer-windows-signed.ps1')
+    $signedPin = Get-CivicCastSignedGStreamerPin
+    $signedRuntimeExe = Join-Path $GstDir $signedPin.file
+    if (-not [string]::IsNullOrEmpty($GStreamerInputPath)) {
+        if ($GStreamerInputPath -match '^[\\/]{2}') {
+            throw 'GStreamerInputPath must not be a UNC path.'
+        }
+        if ($GStreamerInputPath -match '^[A-Za-z][A-Za-z0-9+.-]*:' -and $GStreamerInputPath -notmatch '^[A-Za-z]:') {
+            throw 'GStreamerInputPath must be a local filesystem path, not a URI.'
+        }
+        $srcItem = Get-Item -LiteralPath $GStreamerInputPath -ErrorAction Stop
+        if ($srcItem.PSProvider.Name -ne 'FileSystem' -or $srcItem.PSIsContainer) {
+            throw 'GStreamerInputPath must resolve to a filesystem file.'
+        }
+        Assert-CivicCastSignedGStreamer $srcItem.FullName
+        $destFull = [System.IO.Path]::GetFullPath($signedRuntimeExe)
+        if (-not [string]::Equals($srcItem.FullName, $destFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+            Copy-Item -LiteralPath $srcItem.FullName -Destination $signedRuntimeExe -Force
+        }
+        Assert-CivicCastSignedGStreamer ([System.IO.Path]::GetFullPath($signedRuntimeExe))
+    }
+    else {
+        Download-Pinned $signedPin.url $signedRuntimeExe $signedPin.signed_sha256
+        Assert-CivicCastSignedGStreamer $signedRuntimeExe
+    }
+}
 $gstRoot = Join-Path $env:LOCALAPPDATA 'Programs\gstreamer\1.0\msvc_x86_64'
 $gstLog = Join-Path $RunnerTemp 'gstreamer-install.log'
 Invoke-Setup $gstExe @('/VERYSILENT','/SUPPRESSMSGBOXES','/SP-','/CURRENTUSER','/NORESTART','/TYPE=devel','/TASKS=',"/DIR=`"$gstRoot`"","/LOG=`"$gstLog`"") 600 | Out-Null
@@ -102,7 +138,9 @@ Push-Location $RepoRoot
 try {
     & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File 'scripts/invoke-cargo.ps1' fetch --locked
     if ($LASTEXITCODE -ne 0) { throw "invoke-cargo.ps1 fetch failed ($LASTEXITCODE)" }
-    & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File 'installer/build-installer.ps1'
+    $buildInstallerArgs = @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File','installer/build-installer.ps1')
+    if ($UseSignedGStreamer) { $buildInstallerArgs += '-UseSignedGStreamer' }
+    & powershell.exe @buildInstallerArgs
     if ($LASTEXITCODE -ne 0) { throw "build-installer.ps1 failed ($LASTEXITCODE)" }
 } finally { Pop-Location }
 

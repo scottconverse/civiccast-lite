@@ -1,0 +1,11 @@
+{
+  "file": "halo-gstreamer-1.28.6-rebuilt-setup.exe",
+  "unsigned_sha256": "678cac58e182b5aa3e71fe16451e5b29b5eec54d11cc919b843e0ac4b73670d0",
+  "signed_sha256": "daf7cf53c5ed1d58b802143d34fea6645d8ac92c3a954e0219d7d3a42b135d4f",
+  "signed_bytes": 528597776,
+  "signer_subject": "CN=Scott Converse, O=Scott Converse, L=Longmont, S=co, C=US",
+  "signer_thumb": "2DF3B3F01D2FEC69EF90CC941C26B21ED079349B",
+  "timestamp": "CN=Microsoft Public RSA Time Stamping Authority, OU=nShield TSS ESN:7D00-05E0-D947, OU=Microsoft America Operations, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+  "workflow_run": "45038334051",
+  "status": "Valid"
+}
