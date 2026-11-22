@@ -1,38 +1,31 @@
 # CivicCast Lab
 
-Private research project developing the Rust broadcast engine
-originally built as TownLight Station. It is separate from the working
-[CivicCast product](https://github.com/scottconverse/civiccast).
+CivicCast Lab is a private prerelease for meetings, video podcasts, and scheduled programming. Start with the [private prerelease v0.1.0.12](https://github.com/scottconverse/civiccast-lab/releases/tag/v0.1.0.12). It is a separate product from [CivicCast](https://github.com/scottconverse/civiccast) and the [Townlight Station recorder](https://github.com/townlight/station/tree/main/beta-1).
 
-This repository retains the Rust control plane and GStreamer media engine,
-TypeScript/React operator interface, Windows installer and recovery tooling,
-architecture documents, tests and historical evidence. It is unfinished and is
-not a released station product.
+Independent channels can run scheduled local media or live takes. Each channel publishes to one RTMP or RTMPS target. A cable headend path and an independent web path can run from the same station. The viewer portal serves self-hosted HLS and works independently of YouTube.
 
-- [Provenance, separation and next-agent handoff](SEPARATION.md)
-- [Inherited project assessment](PROJECT_STATUS.md)
-- [Capability ledger](CAPABILITIES.md)
-- [Architecture](docs/architecture/overview.md)
+Rust runs the station service and channel workers. GStreamer 1.28 handles media, React and TypeScript power the operator console, and SQLite stores station state.
 
-The lightweight Python meeting recorder stays in
-[Townlight Station](https://github.com/townlight/station/tree/main/beta-1).
-Its removal from this current tree does not rewrite the original history or tags.
-Cross-platform work targets Windows, macOS on Apple silicon, and Ubuntu. The
-channel worker builds with Cargo and a native GStreamer 1.28 development
-runtime. On Linux its playout graph requires the Pango text overlay and the Rust
-closed-caption plugin. The ingest loudness analyzer uses the Rust audiofx plugin.
-Windows development uses the safe Cargo wrapper in scripts/. The installed
-station and its 3-, 6-, and 9-channel capacities still need qualification on
-the three reference machines.
+## Status
 
-On macOS and Ubuntu the service reads its 32-byte AES-GCM key from
-`station-master.key` in its credential directory. Ubuntu uses the systemd
-`CREDENTIALS_DIRECTORY` when available and otherwise uses
-`/etc/civiccast-lab/credentials`. macOS uses
-`/Library/Application Support/CivicCast Lab/credentials`. Set
-`CIVICCAST_CREDENTIAL_DIRECTORY` to use a different absolute directory.
-Provision a cryptographically random key when setting up a new station.
-The service requires a regular file readable only by its owner, owned by
-the service account or root. Keep the same key through upgrades and
-rollback. Restoring encrypted station credentials requires restoring that
-key separately from the database. Windows continues to use machine DPAPI.
+**macOS arm64.** Short runs passed at 3, 6, and 9 channels for cable and the independent viewer portal.
+
+**Ubuntu 26 amd64.** Local RTMP receiver recovery passed.
+
+**Open checks.** Windows R7 has an unresolved intermittent nine-channel picture freeze. Playback at YouTube and capacity on the physical Ubuntu R9 still need verification.
+
+The 3-, 6-, and 9-channel tiers are evaluation targets. Capacity depends on the host, media, encoder, and outputs.
+
+## Quick start
+
+Read the [user manual](docs/USER-MANUAL.md) for detailed steps. Download only from the tagged private prerelease. Verify artifacts against published `SHA256SUMS.txt`. Windows builds are signed. macOS builds are ad-hoc signed. Open the operator console at `http://127.0.0.1:4070` on Windows or `http://127.0.0.1:8787` on macOS and Ubuntu.
+
+## Source map
+
+- [User manual](docs/USER-MANUAL.md)
+- [Architecture overview](docs/architecture/overview.md)
+- [Viewer portal setup](web/portal/README.md)
+- [Marketing landing page](web/marketing/index.html), a static page you can open from a checkout
+- [Contributions](CONTRIBUTING.md)
+- [Historical handoff](SEPARATION.md)
+- [Code license](LICENSE-CODE) and [documentation license](LICENSE-DOCS)
