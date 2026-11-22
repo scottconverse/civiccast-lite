@@ -8,6 +8,9 @@ CivicCast Lite was developed in small, executable vertical slices.
 2. Clone the repository.
 3. Read [the architecture](docs/architecture/overview.md) and [project history](SEPARATION.md).
 
+See [Build and package CivicCast Lite](docs/BUILDING.md) for the pinned Windows, macOS,
+and Ubuntu toolchains and the Windows signing procedure.
+
 ## Change contract
 
 - Write a failing behavior test before changing logic or a public interface.

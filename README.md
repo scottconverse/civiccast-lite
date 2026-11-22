@@ -35,7 +35,7 @@ The 3-, 6-, and 9-channel figures describe test tiers. Capacity depends on the m
 - [Technical user guide](docs/USER-MANUAL.md#technical-users)
 - [Architecture section](docs/USER-MANUAL.md#architecture) and [full architecture diagrams](docs/architecture/overview.md)
 - [Independent viewer portal setup](web/portal/README.md)
-- [Contributing](CONTRIBUTING.md) and [project history](SEPARATION.md)
+- [Build and package from source](docs/BUILDING.md), [contributing](CONTRIBUTING.md), and [project history](SEPARATION.md)
 - [Code license](LICENSE-CODE), [documentation license](LICENSE-DOCS), and [third-party notices](THIRD-PARTY-NOTICES.md)
 
 CivicCast Lite developed from the Rust Townlight Station project. [CivicCast](https://github.com/scottconverse/civiccast) and the [Townlight meeting recorder](https://github.com/townlight/station/tree/main/beta-1) are separate projects.
