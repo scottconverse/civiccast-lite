@@ -1,0 +1,110 @@
+name: Build installers
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version for macOS and Ubuntu
+        required: true
+        default: '0.1.0.12'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Build Windows installer
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          clean: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22.23.5'
+          package-manager-cache: false
+
+      - name: Build Windows installer
+        shell: powershell
+        run: |
+          powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File installer/bootstrap-windows-ci.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload Windows installer artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: civiccast-lite-windows-x64
+          path: |
+            dist/TownLight-Station-0.1.0-x64-setup.exe
+            dist/candidate-manifest.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  macos:
+    name: Build macOS installer
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          clean: true
+
+      - name: Install pinned Rust
+        shell: bash
+        run: rustup toolchain install 1.100.0 --profile minimal
+
+      - name: Build macOS installer
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ inputs.version }}
+        run: |
+          sh installer/macos/build-hosted.sh "$PACKAGE_VERSION" "$RUNNER_TEMP/civiccast-installers"
+
+      - name: Upload macOS installer artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: civiccast-lite-macos-arm64
+          path: ${{ runner.temp }}/civiccast-installers
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  ubuntu:
+    name: Build Ubuntu installer
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          clean: true
+
+      - name: Install pinned Rust
+        shell: bash
+        run: rustup toolchain install 1.100.0 --profile minimal
+
+      - name: Build Ubuntu installer
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ inputs.version }}
+        run: |
+          sh installer/ubuntu/build-hosted.sh "$PACKAGE_VERSION" "$RUNNER_TEMP/civiccast-installers"
+
+      - name: Upload Ubuntu installer artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: civiccast-lite-ubuntu26-amd64
+          path: ${{ runner.temp }}/civiccast-installers
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

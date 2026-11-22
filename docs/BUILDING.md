@@ -4,7 +4,11 @@ Clone `https://github.com/scottconverse/civiccast-lite.git` on a build host for 
 
 Git tracks the application, portal, operator console, lockfiles and packaging scripts. Build inputs also come from the tool and library publishers listed below. Station databases, test footage, saved credentials and private update keys are unnecessary for a build.
 
-These commands run on compatible build hosts. The Windows GitHub Actions workflow contains kernel checks. The repository does not currently have a hosted workflow that assembles all three packages.
+## GitHub-hosted installer candidates
+
+Run [Build installers](https://github.com/scottconverse/civiccast-lite/actions/workflows/build-installers.yml) from the branch you want to package. The three jobs check out the same source revision on fresh Windows x64, macOS arm64, and Ubuntu 26.04 amd64 runners. Set the package version for macOS and Ubuntu at dispatch. The Windows job uses the product version in the Inno Setup definition.
+
+Download the three artifacts from the workflow run. Verify the Windows setup SHA-256 against `candidate-manifest.json` and the macOS and Ubuntu packages against their `SHA256SUMS.txt` files. The run page identifies the source commit. These are build candidates. The Windows setup is unsigned, and the release signing procedure remains separate.
 
 ## Windows x64
 
