@@ -10,6 +10,8 @@ Serve this directory as a static HTTPS website on the station's web server. Use 
 
 Open the site, choose a channel and press Play. A link such as `/?channel=<channel-uuid>` selects a specific channel. The page, scripts, channel list and media all load from the station website. A YouTube account is optional for website playback.
 
+If the connection drops while you are watching, the player tries to resume once the channel is ready. If your browser blocks automatic playback, use the player's Play control. A channel you paused stays paused after reconnecting.
+
 To send the same channel to a streaming service, use the channel distribution controls in the operator console as a Setup Admin. Enter the full RTMP or RTMPS ingest URL for the intended broadcast, including its stream key. The console returns whether a destination is configured. Disabling that destination leaves the channel's cable and portal outputs enabled.
 
 The bundled browser library is pinned in package-lock.json. To refresh it after changing the version, run `npm ci` in this directory and copy `node_modules/hls.js/dist/hls.light.min.js` and its package LICENSE to the corresponding tracked files. The station embeds the public assets at build time.

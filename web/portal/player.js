@@ -6,21 +6,26 @@ const requested = () => new URL(location.href).searchParams.get("channel");
 let player;
 let timer;
 let active;
-function tune(id) {
+let version = 0;
+let intent = false;
+let resumeOnCanPlay = false;
+function tune(id, resume = false) {
   clearTimeout(timer);
+  const v = ++version;
   if (player) player.destroy();
   player = undefined;
   active = id;
-  video.pause();
   video.removeAttribute("src");
   video.load();
+  intent = resume;
+  resumeOnCanPlay = resume;
   if (!id) return;
   select.value = id;
   const url = "./" + encodeURIComponent(id) + "/live.m3u8";
   status.textContent = "Connecting to " + select.selectedOptions[0].textContent + "…";
   if (window.Hls && Hls.isSupported()) {
     player = new Hls();
-    player.on(Hls.Events.ERROR, (_, data) => { if (data.fatal) reconnect(); });
+    player.on(Hls.Events.ERROR, (_, data) => { if (data.fatal && v === version) reconnect(); });
     player.loadSource(url);
     player.attachMedia(video);
   } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -33,12 +38,23 @@ function reconnect() {
   if (!active) return;
   status.textContent = "Waiting for the channel to reconnect…";
   clearTimeout(timer);
-  timer = setTimeout(() => tune(active), 3500);
+  const v = version;
+  timer = setTimeout(() => { if (v === version) tune(active, intent); }, 3500);
 }
 video.addEventListener("error", reconnect);
+video.addEventListener("play", () => { intent = true; });
+video.addEventListener("pause", () => { if (video.readyState >= 1 && !video.error) intent = false; });
 video.addEventListener("playing", () => { status.textContent = select.selectedOptions[0]?.textContent || ""; });
 video.addEventListener("canplay", () => {
-  if (video.paused) status.textContent = "Press play to watch " + select.selectedOptions[0]?.textContent + ".";
+  const v = version;
+  if (resumeOnCanPlay) {
+    resumeOnCanPlay = false;
+    video.play().catch(() => {
+      if (v === version && video.paused) status.textContent = "Press play to watch " + select.selectedOptions[0]?.textContent + ".";
+    });
+  } else if (video.paused) {
+    status.textContent = "Press play to watch " + select.selectedOptions[0]?.textContent + ".";
+  }
 });
 select.addEventListener("change", () => {
   const url = new URL(location.href);
