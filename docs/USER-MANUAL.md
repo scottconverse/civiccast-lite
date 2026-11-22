@@ -1,12 +1,12 @@
-# CivicCast Lab user manual
+# CivicCast Lite user manual
 
-This guide covers the private [v0.1.0.12 evaluation release](https://github.com/scottconverse/civiccast-lab/releases/tag/v0.1.0.12). Use the operator console to run the station. Viewers watch through an independently hosted website, a cable receiver, or a streaming provider.
+This guide covers the public [v0.1.0.12 prerelease](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.12). Use the operator console to run the station. Viewers watch through an independently hosted website, a cable receiver, or a streaming provider.
 
 ## New users
 
 ### Install and open the console
 
-Download the package for your station machine and `SHA256SUMS.txt` from the [private release](https://github.com/scottconverse/civiccast-lab/releases/tag/v0.1.0.12). Compare the downloaded file's SHA-256 digest with the matching line in the checksum file. Use `Get-FileHash -Algorithm SHA256 <file>` on Windows, `shasum -a 256 <file>` on macOS, or `sha256sum <file>` on Ubuntu. If the digest differs, download a fresh copy and check again before installing.
+Download the package for your station machine and `SHA256SUMS.txt` from the [release](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.12). Compare the downloaded file's SHA-256 digest with the matching line in the checksum file. Use `Get-FileHash -Algorithm SHA256 <file>` on Windows, `shasum -a 256 <file>` on macOS, or `sha256sum <file>` on Ubuntu. If the digest differs, download a fresh copy and check again before installing.
 
 | Platform | Package and installation | Operator console on the station |
 | --- | --- | --- |
@@ -14,7 +14,7 @@ Download the package for your station machine and `SHA256SUMS.txt` from the [pri
 | macOS on Apple silicon | `CivicCast-Lab-ebffd38-release-arm64.pkg`. Open the package in Installer or run `sudo installer -pkg CivicCast-Lab-ebffd38-release-arm64.pkg -target /` from the download folder. The package has an ad-hoc signature and is subject to local installation policy. | `http://127.0.0.1:8787/` |
 | Ubuntu 26 amd64 | `CivicCast-Lab-ubuntu26-credential-acl-0.1.0.12.deb`. From the download folder, run `sudo apt install ./CivicCast-Lab-ubuntu26-credential-acl-0.1.0.12.deb`. | `http://127.0.0.1:8787/` |
 
-The installed service binds to the station's loopback address. Open the console on the station itself. Some console titles and Windows paths still use the inherited TownLight Station name.
+The installed service binds to the station's loopback address. Open the console on the station itself. The v0.1.0.12 packages were built under earlier names. Some console titles and Windows paths display TownLight Station. macOS and Ubuntu retain the original CivicCast Lab package, service, and filesystem identifiers listed below.
 
 ### Create the first operator
 
@@ -86,4 +86,20 @@ After restore, confirm service health, sign-in, media readiness, the intended sc
 
 For capacity checks, record the package version, host, active channels, source types, destinations, and receiver results. Three, six, and nine are test tiers. macOS passed short cable and portal checks at each tier and Ubuntu passed local RTMP receiver recovery. The R7 nine-channel picture freeze, YouTube viewer playback, and physical Ubuntu R9 capacity remain open.
 
-[Architecture](architecture/overview.md) · [Repository and release status](../README.md)
+## Architecture
+
+Each enabled channel runs in a supervised worker. The station service manages the media library, schedule, operator accounts, and configuration. A worker uses the current schedule, a confirmed live take, or the fallback source to feed its on-air outputs. If a worker exits, the service starts a replacement and reconciles that channel against its journal and schedule.
+
+```mermaid
+flowchart LR
+  Operator["Local operator console"] --> Station["stationd"]
+  Station --> Schedule[("Schedule and configuration")]
+  Station <-->|"Commands and events"| Worker["One worker per enabled channel"]
+  Worker --> Cable["Cable receiver"]
+  Worker --> RTMP["Optional RTMP or RTMPS destination"]
+  Worker --> HLS["Independent HLS viewer website"]
+```
+
+The operator console uses a loopback address. Expose only the generated viewer directory through the website's HTTPS server. Keep station state, media, and credentials outside that directory.
+
+The [full architecture](architecture/overview.md) includes diagrams of the runtime and trust boundaries, media routing, scheduled takes, and worker restart. See the [README](../README.md) for release status and test results.

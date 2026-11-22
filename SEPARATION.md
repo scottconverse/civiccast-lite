@@ -1,8 +1,8 @@
-# CivicCast Lab: source preservation and handoff
+# CivicCast Lite: source preservation and handoff
 
 Owner: Scott Converse. Separation date: November 20, 2026.
 
-Scott authorized separating the experimental Rust station into this private repo.
+The Rust station was originally separated into a private repository under the CivicCast Lab name. It now ships publicly as CivicCast Lite.
 
 ## Provenance
 
@@ -17,12 +17,12 @@ Scott authorized separating the experimental Rust station into this private repo
   Internal crate/service identifiers stay unchanged for reproducibility.
 
 Original history contains the later Python recorder; that recorder stays in
-Townlight and is absent from Lab's current tree. Copied historical tags identify
-their original contents; they are not CivicCast Lab releases.
+Townlight and is absent from the current CivicCast Lite tree. Copied historical tags identify
+their original contents; they are not CivicCast Lite releases.
 
-## Status and known failures
+## Historical status at separation
 
-Development is paused. This is not the current CivicCast product. Inherited
+The current product and release status are in the [README](README.md). Inherited
 PROJECT_STATUS.md and CAPABILITIES.md retain their original assessment and dates.
 
 Windows run https://github.com/townlight/station/actions/runs/44679958123 failed:
@@ -33,16 +33,10 @@ Windows run https://github.com/townlight/station/actions/runs/44679958123 failed
 - `station-media-journal --test durable_journal`: compaction, replay, corruption.
 - `station-storage --test asrun_epg_authority`: compaction and projections.
 
-Current tracking: https://github.com/scottconverse/civiccast-lab/issues/1 .
+Current tracking: https://github.com/scottconverse/civiccast-lite/issues/1 .
 Original issue: https://github.com/townlight/station/issues/29 . Diagnose these
 specific failures without weakening assertions or rerunning unrelated passed work.
 No installer, runtime or full suite was executed for this repository separation.
 Actions are disabled so the preservation push does not launch historical jobs.
 
-## Possible Mac exploration
-
-Scott expressed interest in assessing a Mac version later. No port is implemented
-or authorized by separation. Assess Windows services, named pipes, Win32 process
-and filesystem APIs, native media packaging and installer bindings before proposing
-one. Rust alone does not establish portability. Keep CivicCast and Townlight's
-recorder independent.
+Cross-platform packages for Windows, macOS and Ubuntu are described in the [user manual](docs/USER-MANUAL.md).

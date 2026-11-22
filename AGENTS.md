@@ -1,6 +1,6 @@
-# CivicCast Lab engineering boundaries
+# CivicCast Lite engineering boundaries
 
-- Private, paused Rust research line. Read SEPARATION.md first.
+- CivicCast Lite is the public Rust broadcast station project. Read SEPARATION.md for provenance.
 - Do not resume development, port to Mac, build/sign/publish installers or enable
   automated jobs without a Scott assignment covering that work.
 - Preserve source history and dated evidence. Contracts and inherited receipts

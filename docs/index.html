@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CivicCast Lite — open-source broadcast playout for public programming</title>
+<meta name="description" content="CivicCast Lite is open-source broadcast playout for local government, community stations, and independent producers. Program council meetings and podcasts, then distribute to cable MPEG-TS, optional RTMP(S), and independent website HLS.">
+<style>
+:root{--navy:#0a1f33;--ink:#12283d;--cream:#fbf4e6;--paper:#fffaf0;--emerald:#0d8f6f;--emerald-dark:#076a52;--line:#d9cdb7;--muted:#516476;--max:1160px}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--cream);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.55;-webkit-font-smoothing:antialiased}
+a{color:var(--emerald-dark)}a:hover{color:var(--navy)}
+.skip{position:absolute;left:-999px;top:0;background:var(--navy);color:var(--cream);padding:.7rem 1rem;z-index:100}.skip:focus{left:1rem;top:1rem}
+.wrap{width:min(var(--max),calc(100% - 2rem));margin-inline:auto}
+header{background:rgba(251,244,230,.94);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;backdrop-filter:blur(10px)}
+.nav{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.9rem 0;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:.65rem;text-decoration:none;color:var(--navy);font-weight:800;letter-spacing:-.02em}
+.mark{width:2rem;height:2rem;border-radius:50%;background:var(--navy);display:grid;place-items:center;color:var(--cream);font-family:Georgia,serif;font-size:1.15rem}
+nav ul{display:flex;gap:1.1rem;list-style:none;margin:0;padding:0;flex-wrap:wrap}nav a{color:var(--navy);text-decoration:none;font-size:.9rem;font-weight:650}
+.hero{padding:3.5rem 0 2.5rem;display:grid;grid-template-columns:1.25fr .75fr;gap:2rem;align-items:end}
+.eyebrow{display:inline-flex;align-items:center;gap:.5rem;font-size:.75rem;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:var(--emerald-dark);margin:0 0 1rem}
+.eyebrow::before{content:"";width:1.7rem;height:2px;background:var(--emerald)}
+h1,h2,h3{font-family:Georgia,"Times New Roman",serif;letter-spacing:-.035em;line-height:1.02;margin:0}
+h1{font-size:clamp(2.7rem,7vw,5.6rem);font-weight:500;max-width:13ch}h1 em{font-style:normal;color:var(--emerald-dark);white-space:nowrap}
+.lead{font-size:clamp(1rem,1.5vw,1.2rem);color:var(--muted);max-width:46ch;margin:1.3rem 0 1.5rem}
+.cta-row{display:flex;gap:.7rem;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;padding:.85rem 1.1rem;border-radius:999px;font-weight:750;text-decoration:none;border:1px solid transparent;font-size:.92rem}
+.btn-primary{background:var(--navy);color:var(--cream)}.btn-primary:hover{background:#143a58;color:var(--cream)}
+.btn-ghost{border-color:var(--line);color:var(--navy);background:var(--paper)}.btn-ghost:hover{border-color:var(--navy)}
+.now{background:var(--paper);border:1px solid var(--line);border-radius:1.3rem;padding:1.25rem;box-shadow:0 12px 32px rgba(10,31,51,.06)}
+.now h2{font-size:1.1rem;letter-spacing:-.01em;margin-bottom:.7rem}.now ul{list-style:none;margin:0;padding:0;display:grid;gap:.65rem}
+.now li{padding-bottom:.65rem;border-bottom:1px solid var(--line);font-size:.93rem}.now li:last-child{border-bottom:0;padding-bottom:0}
+.now strong{display:block;color:var(--navy)}.now span{color:var(--muted);font-size:.83rem}
+section{padding:3rem 0}
+.section-head{display:grid;grid-template-columns:.9fr 1.1fr;gap:2rem;align-items:end;margin-bottom:1.5rem}
+h2{font-size:clamp(2rem,4vw,3.4rem);font-weight:500}h3{font-size:1.35rem;font-weight:600}
+.section-head p{color:var(--muted);margin:0;max-width:55ch}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:1.2rem;padding:1.3rem}.card p{color:var(--muted);margin:.7rem 0 0}
+.tag{display:inline-block;font-size:.72rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--emerald-dark);background:#dff3ea;border-radius:999px;padding:.3rem .55rem;margin-bottom:.7rem}
+.diagram{background:var(--navy);color:var(--cream);border-radius:1.7rem;padding:1.5rem;display:grid;grid-template-columns:.85fr 1.15fr;gap:1.2rem;align-items:stretch;margin:0}
+.source{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);border-radius:1.1rem;padding:1.2rem;display:flex;flex-direction:column;justify-content:center}
+.source h3{color:var(--cream);font-size:1.55rem}.source p{color:#c6d4df;margin:.5rem 0 0;font-size:.9rem}
+.signal{display:inline-block;color:#84e0c1;font-size:.72rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin-bottom:.6rem}
+.outputs{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem}
+.output{border-top:3px solid var(--emerald);background:rgba(255,255,255,.06);border-radius:.9rem;padding:1rem;display:flex;flex-direction:column;gap:.45rem}
+.output strong{font-family:Georgia,serif;font-size:1.08rem;line-height:1.15}.output span{color:#c6d4df;font-size:.83rem}
+.diagram-note{grid-column:1/-1;color:#aebfcd;font-size:.82rem;border-top:1px solid rgba(255,255,255,.15);padding-top:.8rem;margin:0}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:start}
+.steps{display:grid;gap:.8rem}.step{display:grid;grid-template-columns:3rem 1fr;gap:.9rem;background:var(--paper);border:1px solid var(--line);border-radius:1rem;padding:1rem}
+.step b{width:3rem;height:3rem;border-radius:50%;background:var(--navy);color:var(--cream);display:grid;place-items:center;font-family:Georgia,serif;font-size:1.1rem}
+.step h3{font-size:1.08rem;margin:0}.step p{margin:.25rem 0 0;color:var(--muted);font-size:.9rem}
+.dist{display:grid;gap:.7rem}.dist div{background:var(--paper);border:1px solid var(--line);border-left:3px solid var(--emerald);border-radius:.9rem;padding:1rem}
+.dist strong{display:block;font-family:Georgia,serif;font-size:1.08rem}.dist span{color:var(--muted);font-size:.88rem}
+.callout{background:#e4f4ed;border:1px solid #b7dfd0;border-radius:1.3rem;padding:1.4rem;margin-top:1.4rem}
+.callout h3{font-size:1.2rem;margin-bottom:.5rem}.callout ul{margin:.5rem 0 0;padding-left:1.1rem;color:#23483b}.callout li{margin:.25rem 0}
+.downloads{background:var(--paper);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.download-head{display:flex;justify-content:space-between;align-items:end;gap:1rem;flex-wrap:wrap;margin-bottom:1.3rem}
+.release-badge{display:inline-block;background:#dff3ea;color:var(--emerald-dark);border-radius:999px;padding:.4rem .7rem;font-size:.78rem;font-weight:800;text-decoration:none}
+.platforms{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}
+.platform{background:var(--cream);border:1px solid var(--line);border-radius:1.2rem;padding:1.2rem;display:flex;flex-direction:column;gap:.8rem;min-height:12rem}
+.platform h3{font-size:1.2rem}.platform p{color:var(--muted);font-size:.9rem;margin:0;flex:1}.platform .btn{align-self:flex-start}
+.docs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.8rem}
+.doc-link{display:block;background:var(--paper);border:1px solid var(--line);border-radius:1rem;padding:1rem;text-decoration:none;color:var(--navy);font-weight:700;font-size:.94rem}
+.doc-link:hover{border-color:var(--emerald);color:var(--emerald-dark)}.doc-link span{display:block;color:var(--muted);font-weight:400;font-size:.8rem;margin-top:.25rem}
+footer{background:var(--navy);color:var(--cream);padding:2.5rem 0 2rem;margin-top:3rem}footer a{color:#bfe9dc}
+.footer-grid{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:1.5rem}footer h3{color:var(--cream);font-size:1.15rem}footer p{color:#b9c9d5;font-size:.9rem;margin:.5rem 0 0}
+footer ul{list-style:none;margin:0;padding:0;display:grid;gap:.4rem;font-size:.9rem}
+.footer-bottom{border-top:1px solid rgba(255,255,255,.15);margin-top:1.8rem;padding-top:1rem;color:#91a8b8;font-size:.8rem;display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+@media(max-width:900px){.hero,.section-head,.split,.diagram{grid-template-columns:1fr}.grid,.outputs,.platforms{grid-template-columns:1fr 1fr}.footer-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:620px){.hero{padding-top:2.5rem}.grid,.outputs,.platforms,.footer-grid{grid-template-columns:1fr}.nav{align-items:flex-start}.step{grid-template-columns:2.5rem 1fr}.step b{width:2.5rem;height:2.5rem}h1{max-width:10ch}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header>
+<div class="wrap nav">
+<a class="brand" href="#top" aria-label="CivicCast Lite home"><span class="mark" aria-hidden="true">C</span>CivicCast Lite</a>
+<nav aria-label="Primary"><ul>
+<li><a href="#programming">Programming</a></li>
+<li><a href="#distribution">Distribution</a></li>
+<li><a href="#workflows">Workflows</a></li>
+<li><a href="#downloads">Downloads</a></li>
+<li><a href="#docs">Docs</a></li>
+</ul></nav>
+</div>
+</header>
+<main id="main">
+<section class="wrap hero" id="top">
+<div>
+<p class="eyebrow">Open-source broadcast playout</p>
+<h1>Put local programming <em>on air.</em></h1>
+<p class="lead">Run council meetings, video podcasts, and local channels from your own station. Send live and recorded shows to cable, YouTube, and a viewer website you control.</p>
+<div class="cta-row">
+<a class="btn btn-primary" href="https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.12">Download v0.1.0.12</a>
+<a class="btn btn-ghost" href="https://github.com/scottconverse/civiccast-lite/blob/main/docs/USER-MANUAL.md">Read the user manual</a>
+</div>
+</div>
+<aside class="now" aria-labelledby="now-title">
+<h2 id="now-title">Example station lineup</h2>
+<ul>
+<li><strong>Channel 1 · Council meeting</strong><span>Live from chambers</span></li>
+<li><strong>Channel 2 · Community Voices</strong><span>Recorded video podcast</span></li>
+</ul>
+</aside>
+</section>
+
+<section class="wrap" id="programming">
+<div class="section-head">
+<div><p class="eyebrow">Built for public programming</p><h2>Give each channel its own lineup.</h2></div>
+<p>Carry a council meeting live on one channel while a recorded interview airs on another. Schedule each channel independently from the local operator console.</p>
+</div>
+<div class="grid">
+<article class="card"><span class="tag">Live</span><h3>Council meetings</h3><p>Run live meeting coverage with a straightforward workflow for public, education, and government channels.</p></article>
+<article class="card"><span class="tag">Recorded</span><h3>Video podcasts</h3><p>Play episode-based programming for community storytelling, interviews, and recurring public affairs shows.</p></article>
+<article class="card"><span class="tag">Independent</span><h3>Your channel</h3><p>Program your own schedule without making distribution dependent on a single cable system or streaming platform.</p></article>
+</div>
+</section>
+
+<section class="wrap" id="distribution">
+<div class="section-head">
+<div><p class="eyebrow">Distribution</p><h2>One channel, three outputs.</h2></div>
+<p>Cable MPEG-TS can run simultaneously with independent website HLS. RTMP(S) is optional for services such as YouTube, so platform delivery stays a deliberate choice.</p>
+</div>
+<figure class="diagram" aria-labelledby="diagram-title" aria-describedby="diagram-desc">
+<div class="source"><span class="signal">Playout source</span><h3 id="diagram-title">CivicCast Lite</h3><p>One independently programmed channel schedule, routed to three output paths.</p></div>
+<div class="outputs" role="group" aria-label="Output destinations">
+<div class="output"><strong>Cable MPEG-TS</strong><span>Simultaneous local cable delivery.</span></div>
+<div class="output"><strong>RTMP(S)</strong><span>Optional streaming to services such as YouTube.</span></div>
+<div class="output"><strong>Website HLS</strong><span>Independent web playback for your own site.</span></div>
+</div>
+<figcaption id="diagram-desc" class="diagram-note">The viewer site plays the station HLS feed independently of the streaming provider.</figcaption>
+</figure>
+</section>
+
+<section class="wrap" id="workflows">
+<div class="section-head">
+<div><p class="eyebrow">Workflows &amp; distribution</p><h2>Schedule a show or take a live feed.</h2></div>
+<p>Keep programming and distribution understandable: arrange the channel, play live or recorded blocks, and verify each output path.</p>
+</div>
+<div class="split">
+<div class="steps">
+<div class="step"><b aria-hidden="true">▤</b><div><h3>Build the schedule</h3><p>Assemble live meeting blocks, recorded podcast episodes, and locally programmed channel segments.</p></div></div>
+<div class="step"><b aria-hidden="true">▶</b><div><h3>Play live or recorded</h3><p>Run meeting coverage as it happens, or play recorded programming as scheduled.</p></div></div>
+<div class="step"><b aria-hidden="true">⇄</b><div><h3>Route outputs</h3><p>Send cable MPEG-TS, optional RTMP(S), and website HLS independently from the same channel.</p></div></div>
+<div class="step"><b aria-hidden="true">✓</b><div><h3>Check the signal</h3><p>Verify each destination separately before relying on a public deployment.</p></div></div>
+</div>
+<div class="dist" aria-label="Distribution paths">
+<div><strong>Simultaneous cable MPEG-TS</strong><span>Deliver the channel to local cable headends as an MPEG-TS output.</span></div>
+<div><strong>Optional RTMP(S)</strong><span>Add a stream target such as YouTube when a platform audience is part of the plan.</span></div>
+<div><strong>Independent website HLS</strong><span>Publish an HLS player feed for your own website, separate from cable and platform delivery.</span></div>
+</div>
+</div>
+</section>
+
+<section class="downloads" id="downloads">
+<div class="wrap">
+<div class="download-head">
+<div><p class="eyebrow">Download</p><h2>v0.1.0.12 public prerelease</h2><p>The current packages retain the earlier installer names. Choose the package for your station.</p></div>
+<a class="release-badge" href="https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.12">View GitHub release</a>
+</div>
+<div class="platforms">
+<article class="platform"><h3>Windows x64</h3><p>Authenticode-signed setup executable.</p><a class="btn btn-primary" href="https://github.com/scottconverse/civiccast-lite/releases/download/v0.1.0.12/CivicCast-Lab-ebffd38-x64-setup.exe">Download for Windows</a></article>
+<article class="platform"><h3>Apple silicon macOS</h3><p>Apple silicon package with an ad-hoc signature.</p><a class="btn btn-primary" href="https://github.com/scottconverse/civiccast-lite/releases/download/v0.1.0.12/CivicCast-Lab-ebffd38-release-arm64.pkg">Download for Mac</a></article>
+<article class="platform"><h3>Ubuntu 26 amd64</h3><p>Debian package for Ubuntu 26 on x64.</p><a class="btn btn-primary" href="https://github.com/scottconverse/civiccast-lite/releases/download/v0.1.0.12/CivicCast-Lab-ubuntu26-credential-acl-0.1.0.12.deb">Download for Ubuntu</a></article>
+</div>
+<div class="callout" aria-labelledby="notes-title">
+<h3 id="notes-title">Release checks and known limits</h3>
+<ul>
+<li><strong>macOS:</strong> Short 3-, 6-, and 9-channel cable and portal checks passed.</li>
+<li><strong>Windows R7:</strong> An intermittent picture freeze occurred during nine-channel playout.</li>
+<li><strong>Linux:</strong> A local RTMP receiver recovery check passed. Physical Ubuntu capacity and YouTube viewer playback remain unverified.</li>
+</ul>
+</div>
+</div>
+</section>
+
+<section class="wrap" id="docs">
+<div class="section-head">
+<div><p class="eyebrow">Docs &amp; source</p><h2>Documentation and source</h2></div>
+<p>Follow the manual to install and run your first channel. The architecture guide shows how the service, channel workers, and outputs fit together.</p>
+</div>
+<div class="docs-grid">
+<a class="doc-link" href="https://github.com/scottconverse/civiccast-lite/blob/main/docs/USER-MANUAL.md">User manual<span>Setup, operation, and checks</span></a>
+<a class="doc-link" href="https://github.com/scottconverse/civiccast-lite/blob/main/docs/architecture/overview.md">Architecture overview<span>System design and distribution paths</span></a>
+<a class="doc-link" href="https://github.com/scottconverse/civiccast-lite">Source code<span>github.com/scottconverse/civiccast-lite</span></a>
+<a class="doc-link" href="https://github.com/scottconverse/civiccast-lite/blob/main/LICENSE">License<span>Open-source terms</span></a>
+</div>
+</section>
+</main>
+
+<footer>
+<div class="wrap footer-grid">
+<div><h3>CivicCast Lite</h3><p>Open-source broadcast playout for local government, community stations, and independent producers.</p></div>
+<div><h3>Project</h3><ul>
+<li><a href="https://github.com/scottconverse/civiccast-lite">Source</a></li>
+<li><a href="https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.12">v0.1.0.12 release</a></li>
+<li><a href="https://github.com/scottconverse/civiccast-lite/blob/main/LICENSE">License</a></li>
+</ul></div>
+<div><h3>Documentation</h3><ul>
+<li><a href="https://github.com/scottconverse/civiccast-lite/blob/main/docs/USER-MANUAL.md">User manual</a></li>
+<li><a href="https://github.com/scottconverse/civiccast-lite/blob/main/docs/architecture/overview.md">Architecture overview</a></li>
+</ul></div>
+</div>
+<div class="wrap footer-bottom"><span>Public prerelease · Verify outputs and capacity for your own deployment.</span><a href="#top">Back to top</a></div>
+</footer>
+</body>
+</html>

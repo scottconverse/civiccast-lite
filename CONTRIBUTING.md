@@ -1,12 +1,12 @@
 # Contributing
 
-CivicCast Lab was developed in small, executable vertical slices.
+CivicCast Lite was developed in small, executable vertical slices.
 
 ## Setup
 
 1. Install Rust 1.97.1 or newer on Windows.
 2. Clone the repository.
-3. Read SEPARATION.md. Development is paused; no clean baseline is claimed.
+3. Read [the architecture](docs/architecture/overview.md) and [project history](SEPARATION.md).
 
 ## Change contract
 

@@ -1,4 +1,4 @@
-> CivicCast Lab: inherited Rust assessment. See [SEPARATION.md](SEPARATION.md).
+> CivicCast Lite: inherited Rust assessment. See [SEPARATION.md](SEPARATION.md).
 > Original dates and internal identities below are preserved; this is not Townlight recorder status.
 
 # Townlight Station capability ledger
