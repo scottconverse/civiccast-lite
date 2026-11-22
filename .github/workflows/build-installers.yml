@@ -6,8 +6,13 @@ on:
       version:
         description: Package version for macOS and Ubuntu
         required: true
-        default: '0.1.0.12'
+        default: '0.1.0.13'
         type: string
+      use_signed_gstreamer:
+        description: Use signed GStreamer rebuild
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -32,8 +37,12 @@ jobs:
 
       - name: Build Windows installer
         shell: powershell
+        env:
+          USE_SIGNED_GSTREAMER: ${{ inputs.use_signed_gstreamer }}
         run: |
-          powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File installer/bootstrap-windows-ci.ps1
+          $params = @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File','installer/bootstrap-windows-ci.ps1')
+          if ($env:USE_SIGNED_GSTREAMER -eq 'true') { $params += '-UseSignedGStreamer' }
+          & powershell.exe @params
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload Windows installer artifacts

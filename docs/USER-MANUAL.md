@@ -1,20 +1,20 @@
 # CivicCast Lite user manual
 
-This guide covers the public [v0.1.0.12 prerelease](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.12). Use the operator console to run the station. Viewers watch through an independently hosted website, a cable receiver, or a streaming provider.
+This guide covers the public [v0.1.0.13 prerelease](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.13). Use the operator console to run the station. Viewers watch through an independently hosted website, a cable receiver, or a streaming provider.
 
 ## New users
 
 ### Install and open the console
 
-Download the package for your station machine and `SHA256SUMS.txt` from the [release](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.12). Compare the downloaded file's SHA-256 digest with the matching line in the checksum file. Use `Get-FileHash -Algorithm SHA256 <file>` on Windows, `shasum -a 256 <file>` on macOS, or `sha256sum <file>` on Ubuntu. If the digest differs, download a fresh copy and check again before installing.
+Download the package for your station machine and `SHA256SUMS.txt` from the [release](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.13). Compare the downloaded file's SHA-256 digest with the matching line in the checksum file. Use `Get-FileHash -Algorithm SHA256 <file>` on Windows, `shasum -a 256 <file>` on macOS, or `sha256sum <file>` on Ubuntu. If the digest differs, download a fresh copy and check again before installing.
 
 | Platform | Package and installation | Operator console on the station |
 | --- | --- | --- |
-| Windows x64 | `CivicCast-Lab-ebffd38-x64-setup.exe`. Check with `Get-AuthenticodeSignature`. Expect a valid Scott Converse Authenticode signature. Run the setup executable with administrator approval. | `http://127.0.0.1:4070/` |
-| macOS on Apple silicon | `CivicCast-Lab-ebffd38-release-arm64.pkg`. Open the package in Installer or run `sudo installer -pkg CivicCast-Lab-ebffd38-release-arm64.pkg -target /` from the download folder. The package has an ad-hoc signature and is subject to local installation policy. | `http://127.0.0.1:8787/` |
-| Ubuntu 26 amd64 | `CivicCast-Lab-ubuntu26-credential-acl-0.1.0.12.deb`. From the download folder, run `sudo apt install ./CivicCast-Lab-ubuntu26-credential-acl-0.1.0.12.deb`. | `http://127.0.0.1:8787/` |
+| Windows x64 | `CivicCast-Lite-0.1.0.13-windows-x64-setup.exe`. Check with `Get-AuthenticodeSignature`. Expect a valid Scott Converse Authenticode signature. Run the setup executable with administrator approval. | `http://127.0.0.1:4070/` |
+| macOS on Apple silicon | `CivicCast-Lite-0.1.0.13-arm64.pkg`. Open the package in Installer or run `sudo installer -pkg CivicCast-Lite-0.1.0.13-arm64.pkg -target /` from the download folder. The station binaries have ad hoc signatures. Local macOS installation policy applies. | `http://127.0.0.1:8787/` |
+| Ubuntu 26 amd64 | `CivicCast-Lite-0.1.0.13-ubuntu26-amd64.deb`. From the download folder, run `sudo apt install ./CivicCast-Lite-0.1.0.13-ubuntu26-amd64.deb`. | `http://127.0.0.1:8787/` |
 
-The installed service binds to the station's loopback address. Open the console on the station itself. The v0.1.0.12 packages were built under earlier names. Some console titles and Windows paths display TownLight Station. macOS and Ubuntu retain the original CivicCast Lab package, service, and filesystem identifiers listed below.
+The installed service binds to the station's loopback address. Open the console on the station itself. Some console titles and Windows paths display TownLight Station. macOS and Ubuntu retain the CivicCast Lab identifiers listed below.
 
 ### Create the first operator
 

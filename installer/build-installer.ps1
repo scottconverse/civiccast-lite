@@ -3,10 +3,15 @@ param(
     [string]$CaptionDecoderArchive,
     [string]$TSDuckRuntimeArchive,
     [string]$InnoCompiler,
-    [switch]$AllowDirty
+    [switch]$AllowDirty,
+    [switch]$UseSignedGStreamer
 )
 
 $ErrorActionPreference = 'Stop'
+if ($UseSignedGStreamer) {
+    . (Join-Path $PSScriptRoot 'gstreamer-windows-signed.ps1')
+    $signedPin = Get-CivicCastSignedGStreamerPin
+}
 . (Join-Path $PSScriptRoot '..\scripts\tsduck-runtime.ps1')
 
 function Get-TrustedKnownFolder([string]$Name) {
@@ -31,7 +36,11 @@ if (-not [string]::IsNullOrWhiteSpace($env:RUSTUP_HOME) -or
     throw 'RUSTUP_HOME or RUSTUP_TOOLCHAIN environment drifted from the direct pinned toolchain boundary.'
 }
 
-$expectedGStreamerInstallerPath = Join-Path $trustedLocalAppData 'Temp\TownLightStation-Toolchain-20260820\gstreamer-1.0-msvc-x86_64-1.28.6.exe'
+if ($UseSignedGStreamer) {
+    $expectedGStreamerInstallerPath = Join-Path $trustedLocalAppData 'Temp\TownLightStation-Toolchain-20260820\gstreamer-1.28.6-windows-x64-civiccast-signed.exe'
+} else {
+    $expectedGStreamerInstallerPath = Join-Path $trustedLocalAppData 'Temp\TownLightStation-Toolchain-20260820\gstreamer-1.0-msvc-x86_64-1.28.6.exe'
+}
 $expectedCaptionDecoderArchivePath = Join-Path $trustedLocalAppData 'Temp\TownLightStation-Toolchain-20260831\ffmpeg-n9.0.1-11-ge47273f4d9-win64-lgpl-9.0.zip'
 $expectedTSDuckRuntimeArchivePath = Join-Path $trustedLocalAppData 'Temp\TownLightStation-Toolchain-20260826\TSDuck-Win64-3.44-4676-Portable.zip'
 $expectedInnoPath = Join-Path $trustedLocalAppData 'Programs\Inno Setup 6\ISCC.exe'
@@ -41,6 +50,9 @@ if ([string]::IsNullOrWhiteSpace($TSDuckRuntimeArchive)) { $TSDuckRuntimeArchive
 if ([string]::IsNullOrWhiteSpace($InnoCompiler)) { $InnoCompiler = $expectedInnoPath }
 
 $expectedRuntimeHash = '059251444d1267b486eba390b18d25fed87e10315e72f757ec6c7e912fa746b5'
+if ($UseSignedGStreamer) {
+    $expectedRuntimeHash = $signedPin.signed_sha256
+}
 $expectedCaptionDecoderArchiveHash = '2484854ad6988d34560f4e6ea7a6ecb9dde0af7c229d2591815d056b04ec4f56'
 $expectedCaptionDecoderHash = '63a0b3c76a245bc0d986853612d9ec43a2a2d1f1c7a3fa40ee459c248075b3a6'
 $expectedCaptionDecoderSize = 114400768
@@ -312,6 +324,9 @@ if (-not [string]::IsNullOrWhiteSpace($configuredGStreamer)) { Assert-CanonicalP
 
 $runtimeHash = (Get-FileHash -LiteralPath $GStreamerInstaller -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($runtimeHash -ne $expectedRuntimeHash) { throw "GStreamer runtime hash mismatch. Expected $expectedRuntimeHash, got $runtimeHash." }
+if ($UseSignedGStreamer) {
+    $null = Assert-CivicCastSignedGStreamer -LiteralPath $GStreamerInstaller
+}
 $captionDecoderArchiveHash = (Get-FileHash -LiteralPath $CaptionDecoderArchive -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($captionDecoderArchiveHash -ne $expectedCaptionDecoderArchiveHash) { throw "Caption decoder archive hash mismatch. Expected $expectedCaptionDecoderArchiveHash, got $captionDecoderArchiveHash." }
 $tsduckRuntimeArchiveHash = (Get-FileHash -LiteralPath $TSDuckRuntimeArchive -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -440,8 +455,10 @@ try {
     $nasPublisherSize = (Get-Item -LiteralPath $nasPublisher).Length
     $automationLaunchHelperSize = (Get-Item -LiteralPath $automationLaunchHelper).Length
     $updaterSize = (Get-Item -LiteralPath $stationUpdater).Length
+    $signedInnoArgs = @()
+    if ($UseSignedGStreamer) { $signedInnoArgs = @('/DUseSignedGStreamer') }
 
-    & $InnoCompiler "/DSourceCommit=$sourceCommit" "/DStationdPath=$stationd" "/DChannelWorkerPath=$channelWorker" "/DNasPublisherPath=$nasPublisher" "/DAutomationLaunchHelperPath=$automationLaunchHelper" "/DStationUpdaterPath=$stationUpdater" "/DStationdSha256=$stationdHash" "/DChannelWorkerSha256=$workerHash" "/DNasPublisherSha256=$nasPublisherHash" "/DAutomationLaunchHelperSha256=$automationLaunchHelperHash" "/DStationUpdaterSha256=$updaterHash" "/DStationdSize=$stationdSize" "/DChannelWorkerSize=$workerSize" "/DNasPublisherSize=$nasPublisherSize" "/DAutomationLaunchHelperSize=$automationLaunchHelperSize" "/DStationUpdaterSize=$updaterSize" "/DGStreamerInstaller=$GStreamerInstaller" "/DCaptionDecoderPath=$captionDecoder" "/DCaptionDecoderLicensePath=$captionDecoderLicense" "/DCaptionDecoderArchiveSha256=$captionDecoderArchiveHash" "/DCaptionDecoderSha256=$captionDecoderHash" "/DCaptionDecoderSize=$expectedCaptionDecoderSize" "/DCaptionDecoderLicenseSha256=$captionDecoderLicenseHash" "/DCaptionDecoderLicenseSize=$expectedCaptionDecoderLicenseSize" "/DTSDuckRuntimeArchive=$TSDuckRuntimeArchive" "/DTSDuckRuntimeSha256=$tsduckRuntimeArchiveHash" "/DTSDuckVersion=$($tsduckPin.version)" "/DTSDuckSourceUrl=$($tsduckPin.source_url)" "/DTSDuckArchiveName=$($tsduckPin.archive_name)" "/DOutputDirectory=$releaseRunDirectory" $innoScript
+    & $InnoCompiler "/DSourceCommit=$sourceCommit" "/DStationdPath=$stationd" "/DChannelWorkerPath=$channelWorker" "/DNasPublisherPath=$nasPublisher" "/DAutomationLaunchHelperPath=$automationLaunchHelper" "/DStationUpdaterPath=$stationUpdater" "/DStationdSha256=$stationdHash" "/DChannelWorkerSha256=$workerHash" "/DNasPublisherSha256=$nasPublisherHash" "/DAutomationLaunchHelperSha256=$automationLaunchHelperHash" "/DStationUpdaterSha256=$updaterHash" "/DStationdSize=$stationdSize" "/DChannelWorkerSize=$workerSize" "/DNasPublisherSize=$nasPublisherSize" "/DAutomationLaunchHelperSize=$automationLaunchHelperSize" "/DStationUpdaterSize=$updaterSize" "/DGStreamerInstaller=$GStreamerInstaller" "/DCaptionDecoderPath=$captionDecoder" "/DCaptionDecoderLicensePath=$captionDecoderLicense" "/DCaptionDecoderArchiveSha256=$captionDecoderArchiveHash" "/DCaptionDecoderSha256=$captionDecoderHash" "/DCaptionDecoderSize=$expectedCaptionDecoderSize" "/DCaptionDecoderLicenseSha256=$captionDecoderLicenseHash" "/DCaptionDecoderLicenseSize=$expectedCaptionDecoderLicenseSize" "/DTSDuckRuntimeArchive=$TSDuckRuntimeArchive" "/DTSDuckRuntimeSha256=$tsduckRuntimeArchiveHash" "/DTSDuckVersion=$($tsduckPin.version)" "/DTSDuckSourceUrl=$($tsduckPin.source_url)" "/DTSDuckArchiveName=$($tsduckPin.archive_name)" "/DOutputDirectory=$releaseRunDirectory" @signedInnoArgs $innoScript
     if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compilation failed.' }
     $stagedInstaller = Join-Path $releaseRunDirectory $installerName
     if (-not (Test-Path -LiteralPath $stagedInstaller -PathType Leaf)) { throw "Expected installer was not produced: $stagedInstaller" }
