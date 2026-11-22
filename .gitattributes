@@ -4,3 +4,4 @@ beta-1/media-source/** -text
 installer/macos/** text eol=lf
 installer/ubuntu/** text eol=lf
 web/operator/index.html text eol=lf
+web/operator/dist/** text eol=lf
