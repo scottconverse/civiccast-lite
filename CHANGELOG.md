@@ -1,4 +1,13 @@
-# Changelog
+# CivicCast Lite changelog
+
+## [v0.1.0.12](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.12)
+
+- Published packages for Windows x64, macOS on Apple silicon, and Ubuntu 26 amd64.
+- The independent HLS viewer can resume after a connection interruption.
+- Ubuntu accepts the protected credential ACL created by systemd.
+- CivicCast Lite is the public project name. The v0.1.0.12 packages retain the filenames and service identifiers they shipped with.
+
+## Inherited Townlight Station changes
 
 > Windows delivery: this package is included in [MSI 1.7.0.1](https://github.com/townlight/townlight/releases/tag/townlight-beta-1-windows-1.7.0.1); [installed acceptance](https://github.com/townlight/townlight/releases/download/townlight-beta-1-windows-1.7.0.1/ACCEPTANCE-Windows-1.7.0.1.md) applies only to the identified artifact. Earlier entries retain their original release context.
 

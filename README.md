@@ -1,31 +1,41 @@
-# CivicCast Lab
+# CivicCast Lite
 
-CivicCast Lab is a private prerelease for meetings, video podcasts, and scheduled programming. Start with the [private prerelease v0.1.0.12](https://github.com/scottconverse/civiccast-lab/releases/tag/v0.1.0.12). It is a separate product from [CivicCast](https://github.com/scottconverse/civiccast) and the [Townlight Station recorder](https://github.com/townlight/station/tree/main/beta-1).
+CivicCast Lite is an open-source broadcast station for local government, community media, and independent producers. Run a council meeting live on one channel while a recorded video podcast plays on another. Each channel can feed a cable headend, one RTMP or RTMPS destination, and an independent viewer website.
 
-Independent channels can run scheduled local media or live takes. Each channel publishes to one RTMP or RTMPS target. A cable headend path and an independent web path can run from the same station. The viewer portal serves self-hosted HLS and works independently of YouTube.
+[Project website](https://scottconverse.github.io/civiccast-lite/) · [Download v0.1.0.12](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.12) · [User manual](docs/USER-MANUAL.md) · [Architecture diagrams](docs/architecture/overview.md)
 
-Rust runs the station service and channel workers. GStreamer 1.28 handles media, React and TypeScript power the operator console, and SQLite stores station state.
+## Get started
 
-## Status
+1. Download the package and SHA-256 checksum file from the release. Choose Windows x64, macOS on Apple silicon, or Ubuntu 26 amd64.
+2. Follow the [new-user setup](docs/USER-MANUAL.md#new-users) to verify the package, create the first operator, and open the local console.
+3. Import a recording or configure a live source. Start with one channel and verify picture and sound at each receiving endpoint.
 
-**macOS arm64.** Short runs passed at 3, 6, and 9 channels for cable and the independent viewer portal.
+The published v0.1.0.12 installers predate the CivicCast Lite name. Their filenames, service names, and on-disk paths retain earlier labels. The manual uses the names that appear on this version.
 
-**Ubuntu 26 amd64.** Local RTMP receiver recovery passed.
+## How it works
 
-**Open checks.** Windows R7 has an unresolved intermittent nine-channel picture freeze. Playback at YouTube and capacity on the physical Ubuntu R9 still need verification.
+The Rust station service owns scheduling, operator authentication, and SQLite state. It supervises one channel worker per enabled channel. GStreamer handles playout, source switching, and distribution. The local operator console uses React and TypeScript. Viewers can watch the station's own HLS feed over HTTPS without a platform account.
 
-The 3-, 6-, and 9-channel tiers are evaluation targets. Capacity depends on the host, media, encoder, and outputs.
+| Path | Use it for |
+| --- | --- |
+| Cable MPEG-TS | An IP handoff to a compatible cable headend or decoder |
+| RTMP or RTMPS | YouTube or another compatible streaming service |
+| Independent HLS | Your station's website using the generated viewer assets |
 
-## Quick start
+## What has been verified
 
-Read the [user manual](docs/USER-MANUAL.md) for detailed steps. Download only from the tagged private prerelease. Verify artifacts against published `SHA256SUMS.txt`. Windows builds are signed. macOS builds are ad-hoc signed. Open the operator console at `http://127.0.0.1:4070` on Windows or `http://127.0.0.1:8787` on macOS and Ubuntu.
+- **macOS** passed short cable and portal checks at 3, 6, and 9 channels. The cable receiver also recovered picture and sound after a channel-worker restart.
+- **Windows** has a signed installer. An intermittent picture freeze occurred on the R7 test machine at nine channels.
+- **Ubuntu** passed a local RTMP receiver recovery test. Physical R9 capacity and playback in YouTube's viewer remain unverified.
 
-## Source map
+The 3-, 6-, and 9-channel figures describe test tiers. Capacity depends on the machine, media, encoder, and outputs.
 
-- [User manual](docs/USER-MANUAL.md)
-- [Architecture overview](docs/architecture/overview.md)
-- [Viewer portal setup](web/portal/README.md)
-- [Marketing landing page](web/marketing/index.html), a static page you can open from a checkout
-- [Contributions](CONTRIBUTING.md)
-- [Historical handoff](SEPARATION.md)
-- [Code license](LICENSE-CODE) and [documentation license](LICENSE-DOCS)
+## Project links
+
+- [Technical user guide](docs/USER-MANUAL.md#technical-users)
+- [Architecture section](docs/USER-MANUAL.md#architecture) and [full architecture diagrams](docs/architecture/overview.md)
+- [Independent viewer portal setup](web/portal/README.md)
+- [Contributing](CONTRIBUTING.md) and [project history](SEPARATION.md)
+- [Code license](LICENSE-CODE), [documentation license](LICENSE-DOCS), and [third-party notices](THIRD-PARTY-NOTICES.md)
+
+CivicCast Lite developed from the Rust Townlight Station project. [CivicCast](https://github.com/scottconverse/civiccast) and the [Townlight meeting recorder](https://github.com/townlight/station/tree/main/beta-1) are separate projects.

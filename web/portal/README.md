@@ -1,4 +1,4 @@
-# Watch live on the station website
+# Watch CivicCast Lite on your station website
 
 Set `CIVICCAST_PORTAL_ROOT` in the station service environment to the absolute path of a dedicated website directory. Its parent must exist and the service account must have write access. Keep the site in a separate tree from the private station database, media library and service credentials.
 
