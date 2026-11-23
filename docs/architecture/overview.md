@@ -1,6 +1,6 @@
 # CivicCast Lite architecture
 
-This guide describes the CivicCast Lite v0.1.0.12 prerelease. The station service manages programming and supervises each channel. Channel workers keep picture and sound moving and feed the configured outputs. See the [user manual](../USER-MANUAL.md) for installation and operation.
+This guide describes the CivicCast Lite v0.1.0.13 prerelease. The station service manages programming and supervises each channel. Channel workers keep picture and sound moving and feed the configured outputs. See the [user manual](../USER-MANUAL.md) for installation and operation.
 
 ## Runtime topology
 
@@ -127,6 +127,6 @@ flowchart TD
 
 ## Testing and limits
 
-Evaluation test tiers are 3, 6, and 9 for this CivicCast Lite v0.1.0.12 prerelease; see the [README](../../README.md) for results and open checks. The measured capacity depends on the selected media and outputs, host, and encoder.
+Evaluation has covered tiers of 3, 6, and 9 channels across builds. The v0.1.0.13 Windows installer passed a short three-channel check on Halo. See the [README](../../README.md) for results and open checks. Measured capacity depends on the media, outputs, host, and encoder.
 
-See the [architecture reference at the prerelease commit](https://github.com/scottconverse/civiccast-lite/blob/ebffd381caa0ba9f7d97ff2e750189b39e8346e3/docs/architecture/overview.md) for inherited subsystem detail and the original design record.
+See the [architecture reference at the v0.1.0.12 commit](https://github.com/scottconverse/civiccast-lite/blob/ebffd381caa0ba9f7d97ff2e750189b39e8346e3/docs/architecture/overview.md) for inherited subsystem detail and the original design record.
