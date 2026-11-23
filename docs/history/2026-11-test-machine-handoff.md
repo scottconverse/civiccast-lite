@@ -1,6 +1,6 @@
 # November 2026 test-machine handoff
 
-The [v0.1.0.12 release](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.12) is the starting point for future installs. Use the package for the target platform and verify it against the release's SHA256SUMS.txt. The Windows R7 test station was on the older 0.1.10 build from `fc23fc2`. The M4 test station was on the published 0.1.0.12 build from `ebffd381`.
+For a fresh install, see the [user manual](../USER-MANUAL.md) for the current download and checksum instructions. For the tests recorded here, the Windows R7 station ran the older 0.1.10 build from `fc23fc2`, and the M4 ran the published [v0.1.0.12 build](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.12) from `ebffd381`.
 
 ## Windows picture freeze
 

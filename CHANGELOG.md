@@ -1,5 +1,11 @@
 # CivicCast Lite changelog
 
+## [v0.1.0.13](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.13)
+
+- Published packages for Windows x64, macOS on Apple silicon, and Ubuntu 26 amd64.
+- The signed Windows installer embeds a rebuilt GStreamer 1.28.6 installer with a signed setup engine. That Windows package passed a clean install and a short three-channel cable and HLS playout check on Halo.
+- A GitHub Actions run from the release tag rebuilt all three installer candidates and verified the signed GStreamer input in the Windows candidate.
+
 ## [v0.1.0.12](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.12)
 
 - Published packages for Windows x64, macOS on Apple silicon, and Ubuntu 26 amd64.
