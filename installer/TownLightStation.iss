@@ -632,7 +632,7 @@ begin
   ExtractTemporaryFile(TSDuckArchiveNameValue);
   ExtractTemporaryFile('tsduck-runtime.ps1');
   Parameters := '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' +
-    '$ErrorActionPreference=''Stop''; . ''' +
+    '$ErrorActionPreference=''Stop''; Import-Module -Name (Join-Path $PSHOME ''Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1''); Import-Module -Name (Join-Path $PSHOME ''Modules\Microsoft.PowerShell.Archive\Microsoft.PowerShell.Archive.psd1''); . ''' +
     ExpandConstant('{tmp}\tsduck-runtime.ps1') + '''; Expand-TownLightTSDuckRuntime -ArchivePath ''' +
     ExpandConstant('{tmp}\' + TSDuckArchiveNameValue) + ''' -DestinationPath ''' +
     TSDuckStagingRoot + ''' | Out-Null"';

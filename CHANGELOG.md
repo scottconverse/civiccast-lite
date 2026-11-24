@@ -7,6 +7,8 @@
 - Editing a manual draft requires a new approval preview. The channel schedule shows current and upcoming items first and lets operators expand the list.
 - The console retries an interrupted dispatch status check and shows when dispatch status cannot be refreshed.
 - A failed station read offers a retry. Failed start or stop requests show an error on the affected channel, and background refreshes preserve unsaved alert rule edits.
+- The Windows installer loads the PowerShell modules it needs to verify and extract the bundled TSDuck runtime.
+- The macOS station service initializes its GStreamer registry without opening a desktop session.
 
 ## [v0.1.0.13](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.13)
 
