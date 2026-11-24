@@ -30,6 +30,8 @@ The installed service binds to the station's loopback address. Open the console 
 4. Select **Prepare commit**. Review the channel, start, duration, conflicts, and missing-media messages. Once the preview is clear, select **Approve & commit to air**.
 5. Check the committed entry and then the on-air state at the scheduled start. Watch and listen at the intended destination to confirm delivery.
 
+On builds from `main` with the scheduling fix, enter the start time in the station time zone shown on the form. If clocks skip or repeat that time during a daylight-saving transition, choose an unambiguous start time.
+
 ### Take a live source and return to the schedule
 
 1. Have the setup administrator configure the channel's live source and confirm the sender is feeding it. In the live takeover screen, select the correct channel and source.
