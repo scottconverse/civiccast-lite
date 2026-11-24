@@ -10,5 +10,5 @@ export CIVICCAST_CREDENTIAL_DIRECTORY="$base/credentials"
 export CIVICCAST_PORTAL_ROOT="/Library/WebServer/Documents/civiccast-lab"
 export HOME="$base/state"
 # Finish plugin discovery before a supervised worker starts its handshake deadline.
-"$media/bin/gst-inspect-1.0" mpegtsmux >/dev/null
+"$base/app/bin/channel-worker" --warm-gstreamer-registry
 exec "$base/app/bin/stationd" service --database "$base/state/station.db" --address 127.0.0.1:8787

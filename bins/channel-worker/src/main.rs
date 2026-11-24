@@ -151,6 +151,21 @@ impl LiveBufferHealth {
 }
 
 fn main() {
+    #[cfg(target_os = "macos")]
+    if std::env::args_os().nth(1).as_deref()
+        == Some(std::ffi::OsStr::new("--warm-gstreamer-registry"))
+    {
+        if std::env::args_os().nth(2).is_some() {
+            fatal(2, "warm-gstreamer-registry", "unexpected argument");
+        }
+        if let Err(error) = gstreamer::init() {
+            fatal(1, "warm-gstreamer-registry", &error.to_string());
+        }
+        if let Err(error) = gstreamer::ElementFactory::make("mpegtsmux").build() {
+            fatal(1, "warm-gstreamer-registry", &error.to_string());
+        }
+        std::process::exit(0);
+    }
     if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("--on-air-publisher")) {
         std::panic::set_hook(Box::new(|_| {}));
         let args: Vec<_> = std::env::args_os().skip(2).collect();
