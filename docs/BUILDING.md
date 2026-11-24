@@ -10,6 +10,8 @@ Run [Build installers](https://github.com/scottconverse/civiccast-lite/actions/w
 
 Download the three artifacts from the workflow run. Verify the Windows setup SHA-256 against `candidate-manifest.json` and the macOS and Ubuntu packages against their `SHA256SUMS.txt` files. The run page identifies the source commit. These are build candidates. The Windows setup is unsigned, and the release signing procedure remains separate.
 
+For this release the Windows setup package reports `0.1.0.14`. Its runtime and updater receipts use the matching semantic version `0.1.14` and record the same source commit.
+
 Select `use_signed_gstreamer` to embed the exact re-signed Windows GStreamer installer shipped as a [v0.1.0.13 build input](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.13). The Windows SDK installation uses the pinned upstream installer. The workflow verifies the SHA-256 and Authenticode provenance of the redistributable before embedding it.
 
 ## Windows x64

@@ -162,7 +162,8 @@ const
   UpdaterServiceName = '{#UpdaterServiceName}';
   RuntimeSha256 = '{#GStreamerSha256}';
   CandidateCommit = '{#SourceCommit}';
-  CandidateVersion = '{#ProductVersion}';
+  // Strict SemVer Windows runtime authority for setup/updater receipts and generated manifests; four-part package 0.1.0.14 remains AppVersion/ProductVersion/VersionInfoVersion, Windows filename, and hosted candidate manifest.
+  RuntimeVersion = '0.1.14';
   StationdSha256 = '{#StationdSha256}';
   ChannelWorkerSha256 = '{#ChannelWorkerSha256}';
   NasPublisherSha256 = '{#NasPublisherSha256}';
@@ -661,7 +662,7 @@ begin
     '{commonappdata}\TownLight Station\runtime-manifest.json');
   Parameters := 'release write-runtime-manifest --runtime-root "' +
     RuntimeRoot + '" --output "' + ManifestPath +
-    '" --version "' + CandidateVersion + '" --source-commit "' +
+    '" --version "' + RuntimeVersion + '" --source-commit "' +
     CandidateCommit + '" --runtime-package-sha256 "' + RuntimeSha256 + '"';
   if (not RunStationdWithPrivateRuntime(Parameters, ResultCode)) or
     (ResultCode <> 0) then
@@ -685,7 +686,7 @@ begin
     '{commonappdata}\TownLight Station\tsduck-runtime-manifest.json');
   Parameters := 'release write-runtime-manifest --runtime-root "' +
     RuntimeRoot + '" --output "' + ManifestPath +
-    '" --version "' + CandidateVersion + '" --source-commit "' +
+    '" --version "' + RuntimeVersion + '" --source-commit "' +
     CandidateCommit + '" --runtime-package-sha256 "' +
     TSDuckRuntimeSha256Value + '"';
   if (not RunStationdWithPrivateRuntime(Parameters, ResultCode)) or
@@ -895,7 +896,7 @@ begin
     '{commonappdata}\TownLight Station\install-receipt.json');
   Receipt := '{' +
     '"product":"TownLight Station",' +
-    '"version":"' + CandidateVersion + '",' +
+    '"version":"' + RuntimeVersion + '",' +
     '"source_commit":"' + CandidateCommit + '",' +
     '"media_runtime_sha256":"' + RuntimeSha256 + '",' +
     '"runtime_manifest_sha256":"' + RuntimeManifestSha256 + '",' +
@@ -934,7 +935,7 @@ begin
       '"package_manifest":{' +
         '"schema_version":2,' +
         '"product":"TownLight Station",' +
-        '"version":"' + CandidateVersion + '",' +
+        '"version":"' + RuntimeVersion + '",' +
         '"source_commit":"' + CandidateCommit + '",' +
         '"files":[' +
           '{"path":"stationd.exe","size_bytes":' + StationdSize +
