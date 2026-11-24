@@ -9,7 +9,7 @@ $repository = Split-Path $PSScriptRoot -Parent
 $configuration = Join-Path $repository 'harness\windows-sandbox\configs\clean-install.wsb'
 $evidenceRoot = Join-Path $env:ProgramData 'TownLight Station\SandboxEvidence'
 $manifestPath = Join-Path $repository 'dist\candidate-manifest.json'
-$installerPath = Join-Path $repository 'dist\TownLight-Station-0.1.0-x64-setup.exe'
+$installerPath = Join-Path $repository 'dist\TownLight-Station-0.1.0.14-x64-setup.exe'
 $guard = Join-Path $PSScriptRoot 'invoke-owned-windows-sandbox.ps1'
 
 foreach ($required in @($configuration, $manifestPath, $installerPath, $guard)) {

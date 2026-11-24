@@ -1,18 +1,18 @@
 # CivicCast Lite user manual
 
-This guide covers the public [v0.1.0.13 prerelease](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.13). Use the operator console to run the station. Viewers watch through an independently hosted website, a cable receiver, or a streaming provider.
+This guide covers the public [v0.1.0.14 prerelease](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.14). Use the operator console to run the station. Viewers watch through an independently hosted website, a cable receiver, or a streaming provider.
 
 ## New users
 
 ### Install and open the console
 
-Download the package for your station machine and `SHA256SUMS.txt` from the [release](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.13). Compare the downloaded file's SHA-256 digest with the matching line in the checksum file. Use `Get-FileHash -Algorithm SHA256 <file>` on Windows, `shasum -a 256 <file>` on macOS, or `sha256sum <file>` on Ubuntu. If the digest differs, download a fresh copy and check again before installing.
+Download the package for your station machine and `SHA256SUMS.txt` from the [release](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.14). Compare the downloaded file's SHA-256 digest with the matching line in the checksum file. Use `Get-FileHash -Algorithm SHA256 <file>` on Windows, `shasum -a 256 <file>` on macOS, or `sha256sum <file>` on Ubuntu. If the digest differs, download a fresh copy and check again before installing.
 
 | Platform | Package and installation | Operator console on the station |
 | --- | --- | --- |
-| Windows x64 | `CivicCast-Lite-0.1.0.13-windows-x64-setup.exe`. Check with `Get-AuthenticodeSignature`. Expect a valid Scott Converse Authenticode signature. Run the setup executable with administrator approval. | `http://127.0.0.1:4070/` |
-| macOS on Apple silicon | `CivicCast-Lite-0.1.0.13-arm64.pkg`. Open the package in Installer or run `sudo installer -pkg CivicCast-Lite-0.1.0.13-arm64.pkg -target /` from the download folder. The station binaries have ad hoc signatures. Local macOS installation policy applies. | `http://127.0.0.1:8787/` |
-| Ubuntu 26 amd64 | `CivicCast-Lite-0.1.0.13-ubuntu26-amd64.deb`. From the download folder, run `sudo apt install ./CivicCast-Lite-0.1.0.13-ubuntu26-amd64.deb`. | `http://127.0.0.1:8787/` |
+| Windows x64 | `CivicCast-Lite-0.1.0.14-windows-x64-setup.exe`. Check with `Get-AuthenticodeSignature`. Expect a valid Scott Converse Authenticode signature. Run the setup executable with administrator approval. | `http://127.0.0.1:4070/` |
+| macOS on Apple silicon | `CivicCast-Lite-0.1.0.14-arm64.pkg`. Open the package in Installer or run `sudo installer -pkg CivicCast-Lite-0.1.0.14-arm64.pkg -target /` from the download folder. The station binaries have ad hoc signatures. Local macOS installation policy applies. | `http://127.0.0.1:8787/` |
+| Ubuntu 26 amd64 | `CivicCast-Lite-0.1.0.14-ubuntu26-amd64.deb`. From the download folder, run `sudo apt install ./CivicCast-Lite-0.1.0.14-ubuntu26-amd64.deb`. | `http://127.0.0.1:8787/` |
 
 The installed service binds to the station's loopback address. Open the console on the station itself. Some console titles and Windows paths display TownLight Station. macOS and Ubuntu retain the CivicCast Lab identifiers listed below.
 
@@ -30,9 +30,9 @@ The installed service binds to the station's loopback address. Open the console 
 4. Select **Prepare commit**. Review the channel, start, duration, conflicts, and missing-media messages. Once the preview is clear, select **Approve & commit to air**.
 5. Check the committed entry and then the on-air state at the scheduled start. Watch and listen at the intended destination to confirm delivery.
 
-On builds from `main` with the scheduling fix, enter the start time in the station time zone shown on the form. If clocks skip or repeat that time during a daylight-saving transition, choose an unambiguous start time.
+Enter the start time in the station time zone shown on the form. If clocks skip or repeat that time during a daylight-saving transition, choose an unambiguous start time.
 
-On builds that include the operator walkthrough fixes, prepare a new preview after editing the draft. **Schedule items** shows current and upcoming entries first. Use **Show more** to expand the list. If dispatch status checks end before confirmation, the console labels the displayed status as the last one it received.
+Prepare a new preview after editing the draft. **Schedule items** shows current and upcoming entries first. Use **Show more** to expand the list. If dispatch status checks end before confirmation, the console labels the displayed status as the last one it received.
 
 ### Take a live source and return to the schedule
 

@@ -6,7 +6,7 @@ on:
       version:
         description: Package version for macOS and Ubuntu
         required: true
-        default: '0.1.0.13'
+        default: '0.1.0.14'
         type: string
       use_signed_gstreamer:
         description: Use signed GStreamer rebuild
@@ -50,7 +50,7 @@ jobs:
         with:
           name: civiccast-lite-windows-x64
           path: |
-            dist/TownLight-Station-0.1.0-x64-setup.exe
+            dist/TownLight-Station-0.1.0.14-x64-setup.exe
             dist/candidate-manifest.json
           if-no-files-found: error
           compression-level: 0
@@ -78,6 +78,13 @@ jobs:
         run: |
           sh installer/macos/build-hosted.sh "$PACKAGE_VERSION" "$RUNNER_TEMP/civiccast-installers"
 
+      - name: Record source provenance
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ inputs.version }}
+        run: |
+          printf 'github_sha=%s\npackage_version=%s\n' "$GITHUB_SHA" "$PACKAGE_VERSION" >> "$RUNNER_TEMP/civiccast-installers/source-provenance.txt"
+
       - name: Upload macOS installer artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
@@ -86,6 +93,73 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+
+      - name: Smoke test installed macOS package
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          : "${PACKAGE_VERSION:?PACKAGE_VERSION is required}"
+          artifacts_dir="${RUNNER_TEMP:?RUNNER_TEMP is required}/civiccast-installers"
+          pkg_name="CivicCast-Lite-${PACKAGE_VERSION}-arm64.pkg"
+          pkg="$artifacts_dir/$pkg_name"
+          sums="$artifacts_dir/SHA256SUMS.txt"
+          test -d "$artifacts_dir"
+          test -f "$pkg"
+          test -f "$sums"
+          arch=$(uname -m)
+          test "$arch" = "arm64"
+          echo "OS: $(sw_vers -productName) $(sw_vers -productVersion)"
+          echo "machine: $arch"
+          echo "PACKAGE_VERSION: $PACKAGE_VERSION"
+          echo "git HEAD: $(git rev-parse HEAD)"
+          expected=$(awk -v f="$pkg_name" '{n=$2; sub(/^[*]/,"",n); if(n==f){print $1; exit}}' "$sums")
+          test -n "$expected"
+          actual=$(shasum -a 256 "$pkg" | awk '{print $1}')
+          expected=$(printf '%s' "$expected" | tr 'A-F' 'a-f')
+          actual=$(printf '%s' "$actual" | tr 'A-F' 'a-f')
+          test "$actual" = "$expected"
+          echo "package SHA-256: $actual"
+          sudo installer -pkg "$pkg" -target /
+          installed_version=$(pkgutil --pkg-info org.civiccast.lab.station | awk '$1=="version:"{print $2; exit}')
+          test "$installed_version" = "$PACKAGE_VERSION"
+          echo "installed pkg version: $installed_version"
+          health_tmp=$(mktemp "${RUNNER_TEMP}/civiccast-health.XXXXXX")
+          op_tmp=$(mktemp "${RUNNER_TEMP}/civiccast-operator.XXXXXX")
+          trap 'rm -f "$health_tmp" "$op_tmp"' EXIT
+          attempt=0
+          ok=0
+          while [ "$attempt" -lt 60 ]; do
+            attempt=$((attempt + 1))
+            if launchctl print system/org.civiccast.lab 2>/dev/null | grep -q 'state = running' &&
+               curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:8787/health -o "$health_tmp" 2>/dev/null; then
+              ok=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "readiness failed after $attempt attempts" >&2
+            launchctl print system/org.civiccast.lab >&2 || true
+            curl -iS --connect-timeout 2 --max-time 5 http://127.0.0.1:8787/health >&2 || true
+            exit 1
+          fi
+          echo "health body:"
+          cat "$health_tmp"
+          if ! curl -fsS --connect-timeout 2 --max-time 10 http://127.0.0.1:8787/operator.js -o "$op_tmp"; then
+            echo "failed to fetch /operator.js" >&2
+            curl -iS --connect-timeout 2 --max-time 5 http://127.0.0.1:8787/operator.js >&2 || true
+            exit 1
+          fi
+          served_op_hash=$(shasum -a 256 "$op_tmp" | awk '{print $1}')
+          cmp web/operator/dist/operator.js "$op_tmp"
+          echo "operator.js hash: $served_op_hash"
+          echo "package version: $PACKAGE_VERSION"
+          echo "git rev-parse HEAD: $(git rev-parse HEAD)"
+          echo "package SHA-256: $actual"
+          echo "OS/machine architecture: $(sw_vers -productName) $(sw_vers -productVersion) $arch"
+          echo "status: OK"
 
   ubuntu:
     name: Build Ubuntu installer
@@ -109,6 +183,13 @@ jobs:
         run: |
           sh installer/ubuntu/build-hosted.sh "$PACKAGE_VERSION" "$RUNNER_TEMP/civiccast-installers"
 
+      - name: Record source provenance
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ inputs.version }}
+        run: |
+          printf 'github_sha=%s\npackage_version=%s\n' "$GITHUB_SHA" "$PACKAGE_VERSION" >> "$RUNNER_TEMP/civiccast-installers/source-provenance.txt"
+
       - name: Upload Ubuntu installer artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
@@ -117,3 +198,75 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+
+      - name: Smoke test installed Ubuntu package
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          : "${PACKAGE_VERSION:?PACKAGE_VERSION is required}"
+          artifacts_dir="${RUNNER_TEMP:?RUNNER_TEMP is required}/civiccast-installers"
+          deb_name="CivicCast-Lite-${PACKAGE_VERSION}-ubuntu26-amd64.deb"
+          deb="$artifacts_dir/$deb_name"
+          sums="$artifacts_dir/SHA256SUMS.txt"
+          test -d "$artifacts_dir"
+          test -f "$deb"
+          test -f "$sums"
+          arch=$(dpkg --print-architecture)
+          test "$arch" = "amd64"
+          . /etc/os-release
+          echo "OS: ${PRETTY_NAME:-unknown}"
+          echo "machine: $(uname -m)"
+          echo "PACKAGE_VERSION: $PACKAGE_VERSION"
+          echo "git HEAD: $(git rev-parse HEAD)"
+          expected=$(awk -v f="$deb_name" '{n=$2; sub(/^[*]/,"",n); if(n==f){print $1; exit}}' "$sums")
+          test -n "$expected"
+          actual=$(sha256sum "$deb" | awk '{print $1}')
+          expected=$(printf '%s' "$expected" | tr 'A-F' 'a-f')
+          actual=$(printf '%s' "$actual" | tr 'A-F' 'a-f')
+          test "$actual" = "$expected"
+          echo "package SHA-256: $actual"
+          sudo apt-get install -y "$deb"
+          installed_version=$(dpkg-query -W -f='${Version}' civiccast-lab)
+          installed_arch=$(dpkg-query -W -f='${Architecture}' civiccast-lab)
+          test "$installed_arch" = "amd64"
+          test "$installed_version" = "$PACKAGE_VERSION"
+          echo "installed deb version: $installed_version architecture: $installed_arch"
+          health_tmp=$(mktemp "${RUNNER_TEMP}/civiccast-health.XXXXXX")
+          op_tmp=$(mktemp "${RUNNER_TEMP}/civiccast-operator.XXXXXX")
+          trap 'rm -f "$health_tmp" "$op_tmp"' EXIT
+          attempt=0
+          ok=0
+          while [ "$attempt" -lt 60 ]; do
+            attempt=$((attempt + 1))
+            if systemctl is-active --quiet civiccast-lab.service &&
+               test "$(systemctl show -p LoadState --value civiccast-lab.service)" = loaded &&
+               curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:8787/health -o "$health_tmp" 2>/dev/null; then
+              ok=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "readiness failed after $attempt attempts" >&2
+            systemctl status civiccast-lab.service --no-pager -l >&2 || true
+            journalctl -u civiccast-lab.service --no-pager -n 50 >&2 || true
+            curl -iS --connect-timeout 2 --max-time 5 http://127.0.0.1:8787/health >&2 || true
+            exit 1
+          fi
+          echo "health body:"
+          cat "$health_tmp"
+          if ! curl -fsS --connect-timeout 2 --max-time 10 http://127.0.0.1:8787/operator.js -o "$op_tmp"; then
+            echo "failed to fetch /operator.js" >&2
+            curl -iS --connect-timeout 2 --max-time 5 http://127.0.0.1:8787/operator.js >&2 || true
+            exit 1
+          fi
+          served_op_hash=$(sha256sum "$op_tmp" | awk '{print $1}')
+          cmp web/operator/dist/operator.js "$op_tmp"
+          echo "operator.js hash: $served_op_hash"
+          echo "package version: $PACKAGE_VERSION"
+          echo "git rev-parse HEAD: $(git rev-parse HEAD)"
+          echo "package SHA-256: $actual"
+          echo "OS/machine architecture: ${PRETTY_NAME:-unknown} $(uname -m)"
+          echo "status: OK"

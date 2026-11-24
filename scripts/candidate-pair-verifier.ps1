@@ -395,9 +395,10 @@ function Get-TownLightCandidateIdentity {
     }
 
     $product = Assert-TownLightCandidateString -Manifest $manifest -Name 'product' -Pattern '^TownLight Station$' -Code 'product_invalid'
-    $version = Assert-TownLightCandidateString -Manifest $manifest -Name 'version' -Pattern '^0\.1\.0$' -Code 'version_invalid'
+    $version = Assert-TownLightCandidateString -Manifest $manifest -Name 'version' -Pattern '^(?:0\.1\.0|0\.1\.0\.14)$' -Code 'version_invalid'
+    $expectedInstallerName = "TownLight-Station-$version-x64-setup.exe"
     $sourceCommit = Assert-TownLightCandidateString -Manifest $manifest -Name 'source_commit' -Pattern '^[0-9a-f]{40}$' -Code 'source_commit_invalid'
-    $installerName = Assert-TownLightCandidateString -Manifest $manifest -Name 'installer' -Pattern '^TownLight-Station-0\.1\.0-x64-setup\.exe$' -Code 'installer_name_invalid'
+    $installerName = Assert-TownLightCandidateString -Manifest $manifest -Name 'installer' -Pattern ('^' + [regex]::Escape($expectedInstallerName) + '$') -Code 'installer_name_invalid'
     $installerHash = Assert-TownLightCandidateString -Manifest $manifest -Name 'installer_sha256' -Pattern '^[0-9a-f]{64}$' -Code 'installer_hash_invalid'
 
     foreach ($name in @(
@@ -431,7 +432,7 @@ function Get-TownLightCandidateIdentity {
     $installerPath = Join-Path $manifestItem.Directory.FullName $installerName
     $installerItem = Get-TownLightCandidateSafeLeaf -Path $installerPath -Label 'installer'
     if (-not [string]::Equals($installerItem.Directory.FullName, $manifestItem.Directory.FullName, [StringComparison]::OrdinalIgnoreCase) -or
-        -not [string]::Equals([IO.Path]::GetFileName($installerItem.Name), 'TownLight-Station-0.1.0-x64-setup.exe', [StringComparison]::Ordinal)) {
+        -not [string]::Equals([IO.Path]::GetFileName($installerItem.Name), $expectedInstallerName, [StringComparison]::Ordinal)) {
         throw 'candidate_pair_installer_sibling_invalid'
     }
     $observedHash = (Get-FileHash -LiteralPath $installerItem.FullName -Algorithm SHA256).Hash.ToLowerInvariant()

@@ -145,7 +145,7 @@ try {
 } finally { Pop-Location }
 
 # Verify artifacts
-$setupExe = Join-Path $RepoRoot 'dist\TownLight-Station-0.1.0-x64-setup.exe'
+$setupExe = Join-Path $RepoRoot 'dist\TownLight-Station-0.1.0.14-x64-setup.exe'
 $manifest = Join-Path $RepoRoot 'dist\candidate-manifest.json'
 if (-not (Test-Path $setupExe)) { throw "missing $setupExe" }
 if (-not (Test-Path $manifest)) { throw "missing $manifest" }

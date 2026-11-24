@@ -90,7 +90,7 @@
 #endif
 
 #define ProductName "TownLight Station"
-#define ProductVersion "0.1.0"
+#define ProductVersion "0.1.0.14"
 #define ServiceName "TownLightStation"
 #define UpdaterServiceName "TownLightStationUpdater"
 #define GStreamerFile "gstreamer-1.0-msvc-x86_64-1.28.6.exe"
@@ -123,7 +123,7 @@ CloseApplications=yes
 RestartApplications=no
 UninstallDisplayName=TownLight Station
 UninstallDisplayIcon={app}\stationd.exe
-VersionInfoVersion=0.1.0.0
+VersionInfoVersion=0.1.0.14
 VersionInfoCompany=TownLight
 VersionInfoDescription=TownLight Station installer
 VersionInfoProductName=TownLight Station

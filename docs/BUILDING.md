@@ -66,7 +66,7 @@ Use an Apple Silicon host with Xcode Command Line Tools and Rust 1.100.0 from ru
 
 ```sh
 set -eu
-version=0.1.0.13                      # Set the version being built.
+version=0.1.0.14                      # Set the version being built.
 build=$(mktemp -d)
 prefix="$build/gstreamer"
 runtime=gstreamer-1.0-1.28.6-universal.pkg
@@ -126,7 +126,7 @@ From the checkout root:
 
 ```sh
 set -eu
-version=0.1.0.13                      # Set the version being built.
+version=0.1.0.14                      # Set the version being built.
 build=$(mktemp -d)
 source=gstreamer-1.28.6.tar.xz
 curl -fL --retry 2 "https://gstreamer.freedesktop.org/src/gstreamer/$source" -o "$build/$source"

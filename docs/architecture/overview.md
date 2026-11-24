@@ -1,6 +1,6 @@
 # CivicCast Lite architecture
 
-This guide describes the CivicCast Lite v0.1.0.13 prerelease. The station service manages programming and supervises each channel. Channel workers keep picture and sound moving and feed the configured outputs. See the [user manual](../USER-MANUAL.md) for installation and operation.
+This guide describes the CivicCast Lite v0.1.0.14 prerelease. The station service manages programming and supervises each channel. Channel workers keep picture and sound moving and feed the configured outputs. See the [user manual](../USER-MANUAL.md) for installation and operation.
 
 ## Runtime topology
 

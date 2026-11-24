@@ -91,7 +91,7 @@ $contract = Join-Path $PSScriptRoot 'verify-contract.ps1'
 $innoScript = Join-Path $PSScriptRoot 'TownLightStation.iss'
 $operatorRoot = Join-Path $repository 'web\operator'
 $cargoWrapper = Join-Path $repository 'scripts\invoke-cargo.ps1'
-$installerName = 'TownLight-Station-0.1.0-x64-setup.exe'
+$installerName = 'TownLight-Station-0.1.0.14-x64-setup.exe'
 $publishedInstaller = Join-Path $outputDirectory $installerName
 $publishedManifest = Join-Path $outputDirectory 'candidate-manifest.json'
 
@@ -466,7 +466,7 @@ try {
 
     $manifest = [ordered]@{
         product = 'TownLight Station'
-        version = '0.1.0'
+        version = '0.1.0.14'
         source_commit = $sourceCommit
         installer = $installerName
         installer_sha256 = $stagedInstallerHash

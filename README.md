@@ -2,7 +2,7 @@
 
 CivicCast Lite is an open-source broadcast station for local government, community media, and independent producers. Run a council meeting live on one channel while a recorded video podcast plays on another. Each channel can feed a cable headend, one RTMP or RTMPS destination, and an independent viewer website.
 
-[Project website](https://scottconverse.github.io/civiccast-lite/) · [Download v0.1.0.13](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.13) · [User manual](docs/USER-MANUAL.md) · [Architecture diagrams](docs/architecture/overview.md)
+[Project website](https://scottconverse.github.io/civiccast-lite/) · [Download v0.1.0.14](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.14) · [User manual](docs/USER-MANUAL.md) · [Architecture diagrams](docs/architecture/overview.md)
 
 ## Get started
 
