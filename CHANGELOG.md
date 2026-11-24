@@ -4,6 +4,9 @@
 
 - Manual schedule times and previews use the station profile’s time zone. The console asks for a different time if the entered wall time is skipped or repeated during a daylight-saving transition.
 - The console updates on-air readiness independently of alerts and other panels. If readiness cannot be fetched, the console shows it as unavailable.
+- Editing a manual draft requires a new approval preview. The channel schedule shows current and upcoming items first and lets operators expand the list.
+- The console retries an interrupted dispatch status check and shows when dispatch status cannot be refreshed.
+- A failed station read offers a retry. Failed start or stop requests show an error on the affected channel, and background refreshes preserve unsaved alert rule edits.
 
 ## [v0.1.0.13](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.13)
 

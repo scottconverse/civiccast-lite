@@ -32,6 +32,8 @@ The installed service binds to the station's loopback address. Open the console 
 
 On builds from `main` with the scheduling fix, enter the start time in the station time zone shown on the form. If clocks skip or repeat that time during a daylight-saving transition, choose an unambiguous start time.
 
+On builds that include the operator walkthrough fixes, prepare a new preview after editing the draft. **Schedule items** shows current and upcoming entries first. Use **Show more** to expand the list. If dispatch status checks end before confirmation, the console labels the displayed status as the last one it received.
+
 ### Take a live source and return to the schedule
 
 1. Have the setup administrator configure the channel's live source and confirm the sender is feeding it. In the live takeover screen, select the correct channel and source.

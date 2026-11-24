@@ -682,7 +682,10 @@ function HeadendWorkflow({ channels, profiles, loadingCatalog, catalogError, onR
 
 function Channels({ channels, outputProfiles, onRefresh }: { channels: Channel[]; outputProfiles: OutputProfile[]; onRefresh: () => Promise<void> }) {
   const [name, setName] = useState(""); const [transportKind, setTransportKind] = useState<OutputSink["kind"]>("udp-ts"); const [destination, setDestination] = useState("127.0.0.1:5500"); const [redundantDestination, setRedundantDestination] = useState(""); const [passphrase, setPassphrase] = useState(""); const [redundantPassphrase, setRedundantPassphrase] = useState(""); const [outputProfile, setOutputProfile] = useState<Channel["output_profile"]>("proof-360p30"); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
-  const [headendProfiles, setHeadendProfiles] = useState<HeadendProfile[] | null>(null); const [headendProfilesLoading, setHeadendProfilesLoading] = useState(true); const [headendProfilesError, setHeadendProfilesError] = useState<string | null>(null);
+  const [channelActionPending, setChannelActionPending] = useState<Record<string, boolean>>({}); const [channelActionErrors, setChannelActionErrors] = useState<Record<string, string | null>>({}); const channelActionInFlight = useRef(new Set<string>());
+  const [headendProfiles, setHeadendProfiles] = useState<HeadendProfile[] | null>(null);
+  const [headendProfilesLoading, setHeadendProfilesLoading] = useState(true);
+  const [headendProfilesError, setHeadendProfilesError] = useState<string | null>(null);
   const loadHeadendProfiles = useCallback(async () => {
     setHeadendProfilesLoading(true);
     try { setHeadendProfiles(await request<HeadendProfile[]>("/api/v1/headend-profiles")); setHeadendProfilesError(null); }
@@ -708,9 +711,24 @@ function Channels({ channels, outputProfiles, onRefresh }: { channels: Channel[]
     } catch (problem) { setError(problem instanceof Error ? problem.message : "Channel could not be saved."); }
     finally { setBusy(false); }
   }
-  async function toggle(channel: Channel) { await request<Channel>("/api/v1/channels", { method: "PUT", body: JSON.stringify({ ...channel, enabled: !channel.enabled }) }); await onRefresh(); }
+  async function toggle(channel: Channel) {
+    const channelId = channel.channel_id;
+    if (channelActionInFlight.current.has(channelId)) return;
+    channelActionInFlight.current.add(channelId);
+    setChannelActionErrors((current) => ({ ...current, [channelId]: null }));
+    setChannelActionPending((current) => ({ ...current, [channelId]: true }));
+    try {
+      await request<Channel>("/api/v1/channels", { method: "PUT", body: JSON.stringify({ ...channel, enabled: !channel.enabled }) });
+      await onRefresh();
+    } catch (problem) {
+      setChannelActionErrors((current) => ({ ...current, [channelId]: problem instanceof Error ? problem.message : "Output could not be updated." }));
+    } finally {
+      channelActionInFlight.current.delete(channelId);
+      setChannelActionPending((current) => ({ ...current, [channelId]: false }));
+    }
+  }
   const selected = outputProfiles.find((profile) => profile.profile_id === outputProfile);
-  return <><header className="page-header"><div><p className="eyebrow">Output control</p><h1>Channels</h1><p>Each enabled channel owns an isolated persistent media worker and explicit stable output branches.</p></div></header><section className="split-grid channels-layout"><article className="panel"><p className="eyebrow">Configured outputs</p><h2>{channels.length || "No"} channel{channels.length === 1 ? "" : "s"}</h2>{channels.length ? <div className="channel-cards">{channels.map((channel) => { const profile = outputProfiles.find((item) => item.profile_id === channel.output_profile); const headend = channel.output_sinks.find((sink) => sink.headend)?.headend; const namedHeadend = headendProfiles?.find((item) => item.profile_id === headend?.profile_id); const blockedHeadendStart = !channel.enabled && headend !== undefined && !canStartHeadendProfile(namedHeadend?.execution_state ?? null); const blockedStartLabel = namedHeadend ? "Headend profile blocked" : "Headend status unavailable"; return <article className="channel-card" key={channel.channel_id}><div className="channel-top"><div className="signal-icon">◉</div><StatusPill status={channel.enabled ? "enabled" : "disabled"} /></div><h3>{channel.display_name}</h3><p>{profile?.display_name ?? channel.output_profile} · {channel.output_sinks.filter((sink) => sink.enabled).length} sink{channel.output_sinks.filter((sink) => sink.enabled).length === 1 ? "" : "s"}</p>{headend && <span className="channel-headend-tag">{headend.profile_id.replaceAll("-", " ")} · {(headend.muxrate_kbps / 1000).toFixed(1)} Mb/s{namedHeadend?.execution_state === "staged_only" ? " · staging only" : ""}</span>}{channel.output_sinks.map((sink) => <code key={sink.sink_id}>{sink.label} ({sink.kind.toUpperCase()}{sink.encryption_configured ? " · encrypted" : ""}): {sink.destination}</code>)}<button className="secondary wide" disabled={blockedHeadendStart} title={blockedHeadendStart ? namedHeadend?.execution_detail ?? headendProfilesError ?? "The installed headend catalog has not been verified." : undefined} onClick={() => void toggle(channel)}>{channel.enabled ? "Stop output" : blockedHeadendStart ? blockedStartLabel : "Start output"}</button></article>; })}</div> : <Empty title="No output configured" detail="Create the first persistent channel worker." action="Use the form" onAction={() => document.querySelector<HTMLInputElement>("#channel-name")?.focus()} />}</article><article className="panel sticky-form"><p className="eyebrow">New output</p><h2>Add a channel</h2><form onSubmit={save}><label>Channel name<input id="channel-name" required minLength={2} value={name} onChange={(event) => setName(event.target.value)} placeholder="Government Channel 12" /></label><label>Output profile<select required value={outputProfile} onChange={(event) => setOutputProfile(event.target.value as Channel["output_profile"])}>{outputProfiles.map((profile) => <option key={profile.profile_id} value={profile.profile_id}>{profile.display_name}</option>)}</select>{selected && <small>{selected.intended_use} · {(selected.transport_bitrate_bps / 1_000_000).toFixed(1)} Mb/s CBR transport</small>}</label><label>Transport<select value={transportKind} onChange={(event) => { const next = event.target.value as OutputSink["kind"]; setTransportKind(next); setDestination(next === "srt" ? "srt://127.0.0.1:5600" : "127.0.0.1:5500"); setRedundantDestination(""); setPassphrase(""); setRedundantPassphrase(""); }}><option value="udp-ts">UDP MPEG-TS</option><option value="srt">SRT caller</option></select><small>SRT uses caller mode with a fixed 200 ms latency and optional AES-256 encryption.</small></label><label>Primary {transportKind === "srt" ? "SRT URI" : "UDP destination"}<input required value={destination} onChange={(event) => setDestination(event.target.value)} placeholder={transportKind === "srt" ? "srt://192.168.1.100:5600" : "192.168.1.100:5000"} /><small>{transportKind === "srt" ? "Use a credential-free srt://IP:port URI." : "Use 127.0.0.1 for a local proof channel."}</small></label>{transportKind === "srt" && <label>Primary passphrase <small>Optional</small><input type="password" minLength={10} maxLength={79} autoComplete="new-password" value={passphrase} onChange={(event) => setPassphrase(event.target.value)} /><small>Stored with Windows machine encryption and never returned by the API.</small></label>}<label>Redundant {transportKind === "srt" ? "SRT URI" : "UDP destination"} <small>Optional</small><input value={redundantDestination} onChange={(event) => setRedundantDestination(event.target.value)} placeholder={transportKind === "srt" ? "srt://192.168.2.100:5600" : "192.168.2.100:5000"} /><small>The persistent graph sends the same encoded transport to both required branches.</small></label>{transportKind === "srt" && redundantDestination.trim() && <label>Redundant passphrase <small>Optional</small><input type="password" minLength={10} maxLength={79} autoComplete="new-password" value={redundantPassphrase} onChange={(event) => setRedundantPassphrase(event.target.value)} /></label>}{error && <div className="error-box" role="alert">{error}</div>}<button className="primary wide" disabled={busy || outputProfiles.length === 0}>{busy ? "Saving…" : "Create & start channel"}</button></form></article></section><DistributionPanel channels={channels} />{channels.length > 0 && <section className="fallback-slate-grid">{channels.map((channel) => <FallbackSlatePanel key={channel.channel_id} channelId={channel.channel_id} channelName={channel.display_name} enabled={channel.enabled} />)}</section>}{channels.length > 0 && <section className="caption-policy-grid">{channels.map((channel) => <CaptionPolicyPanel key={channel.channel_id} channelId={channel.channel_id} channelName={channel.display_name} enabled={channel.enabled} />)}</section>}<HeadendWorkflow channels={channels} profiles={headendProfiles} loadingCatalog={headendProfilesLoading} catalogError={headendProfilesError} onReloadProfiles={loadHeadendProfiles} onRefresh={onRefresh} />{channels.filter((channel) => channel.enabled).map((channel) => <LoudnessProofPanel key={channel.channel_id} channelId={channel.channel_id} sinks={channel.output_sinks} />)}</>;
+  return <><header className="page-header"><div><p className="eyebrow">Output control</p><h1>Channels</h1><p>Each enabled channel owns an isolated persistent media worker and explicit stable output branches.</p></div></header><section className="split-grid channels-layout"><article className="panel"><p className="eyebrow">Configured outputs</p><h2>{channels.length || "No"} channel{channels.length === 1 ? "" : "s"}</h2>{channels.length ? <div className="channel-cards">{channels.map((channel) => { const profile = outputProfiles.find((item) => item.profile_id === channel.output_profile); const headend = channel.output_sinks.find((sink) => sink.headend)?.headend; const namedHeadend = headendProfiles?.find((item) => item.profile_id === headend?.profile_id); const blockedHeadendStart = !channel.enabled && headend !== undefined && !canStartHeadendProfile(namedHeadend?.execution_state ?? null); const blockedStartLabel = namedHeadend ? "Headend profile blocked" : "Headend status unavailable"; return <article className="channel-card" key={channel.channel_id}><div className="channel-top"><div className="signal-icon">◉</div><StatusPill status={channel.enabled ? "enabled" : "disabled"} /></div><h3>{channel.display_name}</h3><p>{profile?.display_name ?? channel.output_profile} · {channel.output_sinks.filter((sink) => sink.enabled).length} sink{channel.output_sinks.filter((sink) => sink.enabled).length === 1 ? "" : "s"}</p>{headend && <span className="channel-headend-tag">{headend.profile_id.replaceAll("-", " ")} · {(headend.muxrate_kbps / 1000).toFixed(1)} Mb/s{namedHeadend?.execution_state === "staged_only" ? " · staging only" : ""}</span>}{channel.output_sinks.map((sink) => <code key={sink.sink_id}>{sink.label} ({sink.kind.toUpperCase()}{sink.encryption_configured ? " · encrypted" : ""}): {sink.destination}</code>)}<button className="secondary wide" disabled={blockedHeadendStart || Boolean(channelActionPending[channel.channel_id])} title={blockedHeadendStart ? namedHeadend?.execution_detail ?? headendProfilesError ?? "The installed headend catalog has not been verified." : channelActionPending[channel.channel_id] ? "Updating output…" : undefined} onClick={() => void toggle(channel)}>{channelActionPending[channel.channel_id] ? "Updating…" : channel.enabled ? "Stop output" : blockedHeadendStart ? blockedStartLabel : "Start output"}</button>{channelActionErrors[channel.channel_id] && <div className="error-box" role="alert">{channelActionErrors[channel.channel_id]}</div>}</article>; })}</div> : <Empty title="No output configured" detail="Create the first persistent channel worker." action="Use the form" onAction={() => document.querySelector<HTMLInputElement>("#channel-name")?.focus()} />}</article><article className="panel sticky-form"><p className="eyebrow">New output</p><h2>Add a channel</h2><form onSubmit={save}><label>Channel name<input id="channel-name" required minLength={2} value={name} onChange={(event) => setName(event.target.value)} placeholder="Government Channel 12" /></label><label>Output profile<select required value={outputProfile} onChange={(event) => setOutputProfile(event.target.value as Channel["output_profile"])}>{outputProfiles.map((profile) => <option key={profile.profile_id} value={profile.profile_id}>{profile.display_name}</option>)}</select>{selected && <small>{selected.intended_use} · {(selected.transport_bitrate_bps / 1_000_000).toFixed(1)} Mb/s CBR transport</small>}</label><label>Transport<select value={transportKind} onChange={(event) => { const next = event.target.value as OutputSink["kind"]; setTransportKind(next); setDestination(next === "srt" ? "srt://127.0.0.1:5600" : "127.0.0.1:5500"); setRedundantDestination(""); setPassphrase(""); setRedundantPassphrase(""); }}><option value="udp-ts">UDP MPEG-TS</option><option value="srt">SRT caller</option></select><small>SRT uses caller mode with a fixed 200 ms latency and optional AES-256 encryption.</small></label><label>Primary {transportKind === "srt" ? "SRT URI" : "UDP destination"}<input required value={destination} onChange={(event) => setDestination(event.target.value)} placeholder={transportKind === "srt" ? "srt://192.168.1.100:5600" : "192.168.1.100:5000"} /><small>{transportKind === "srt" ? "Use a credential-free srt://IP:port URI." : "Use 127.0.0.1 for a local proof channel."}</small></label>{transportKind === "srt" && <label>Primary passphrase <small>Optional</small><input type="password" minLength={10} maxLength={79} autoComplete="new-password" value={passphrase} onChange={(event) => setPassphrase(event.target.value)} /><small>Stored with Windows machine encryption and never returned by the API.</small></label>}<label>Redundant {transportKind === "srt" ? "SRT URI" : "UDP destination"} <small>Optional</small><input value={redundantDestination} onChange={(event) => setRedundantDestination(event.target.value)} placeholder={transportKind === "srt" ? "srt://192.168.2.100:5600" : "192.168.2.100:5000"} /><small>The persistent graph sends the same encoded transport to both required branches.</small></label>{transportKind === "srt" && redundantDestination.trim() && <label>Redundant passphrase <small>Optional</small><input type="password" minLength={10} maxLength={79} autoComplete="new-password" value={redundantPassphrase} onChange={(event) => setRedundantPassphrase(event.target.value)} /></label>}{error && <div className="error-box" role="alert">{error}</div>}<button className="primary wide" disabled={busy || outputProfiles.length === 0}>{busy ? "Saving…" : "Create & start channel"}</button></form></article></section><DistributionPanel channels={channels} />{channels.length > 0 && <section className="fallback-slate-grid">{channels.map((channel) => <FallbackSlatePanel key={channel.channel_id} channelId={channel.channel_id} channelName={channel.display_name} enabled={channel.enabled} />)}</section>}{channels.length > 0 && <section className="caption-policy-grid">{channels.map((channel) => <CaptionPolicyPanel key={channel.channel_id} channelId={channel.channel_id} channelName={channel.display_name} enabled={channel.enabled} />)}</section>}<HeadendWorkflow channels={channels} profiles={headendProfiles} loadingCatalog={headendProfilesLoading} catalogError={headendProfilesError} onReloadProfiles={loadHeadendProfiles} onRefresh={onRefresh} />{channels.filter((channel) => channel.enabled).map((channel) => <LoudnessProofPanel key={channel.channel_id} channelId={channel.channel_id} sinks={channel.output_sinks} />)}</>;
 }
 
 function Schedule({ dashboard, channels, stationTimezone }: { dashboard: Dashboard | null; channels: Channel[]; stationTimezone: string }) {
@@ -726,11 +744,14 @@ function Schedule({ dashboard, channels, stationTimezone }: { dashboard: Dashboa
   const [plan, setPlan] = useState<CommitPlan | null>(null);
   const [item, setItem] = useState<ScheduleItem | null>(null);
   const [report, setReport] = useState<CommitReport | null>(null);
+  const [dispatchDeadline, setDispatchDeadline] = useState<number | null>(null);
+  const [dispatchCheckState, setDispatchCheckState] = useState<"current" | "retrying" | "expired">("current");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>([]);
   const [scheduleLoading, setScheduleLoading] = useState(false);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [scheduleLimit, setScheduleLimit] = useState(24);
   const scheduleRequest = useRef(0);
   const activeScheduleChannel = useRef(channelId);
   if (!shouldApplyMaterializationChannel(activeScheduleChannel.current, channelId)) {
@@ -751,11 +772,7 @@ function Schedule({ dashboard, channels, stationTimezone }: { dashboard: Dashboa
     try {
       const next = await request<ScheduleItem[]>(channelSchedulePath(selectedChannelId));
       if (requestId !== scheduleRequest.current || !shouldApplyMaterializationChannel(selectedChannelId, activeScheduleChannel.current)) return;
-      setScheduleItems(
-        next
-          .filter((scheduleItem) => scheduleItem.channel_id === selectedChannelId)
-          .sort((left, right) => left.starts_at_unix_ms - right.starts_at_unix_ms),
-      );
+      setScheduleItems(next.filter((scheduleItem) => scheduleItem.channel_id === selectedChannelId));
       setScheduleError(null);
     } catch (problem) {
       if (requestId === scheduleRequest.current && shouldApplyMaterializationChannel(selectedChannelId, activeScheduleChannel.current)) {
@@ -785,9 +802,57 @@ function Schedule({ dashboard, channels, stationTimezone }: { dashboard: Dashboa
     setPlan(null);
     setItem(null);
     setReport(null);
+    setDispatchDeadline(null);
+    setDispatchCheckState("current");
     setError(null);
+    setScheduleItems([]);
+    setScheduleError(null);
+    setScheduleLimit(24);
     void loadSchedule(channelId);
   }, [channelId, loadSchedule]);
+
+  useEffect(() => {
+    const reportId = report?.report_id;
+    if (!reportId || dispatchDeadline === null) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const poll = async () => {
+      if (cancelled) return;
+      if (Date.now() >= dispatchDeadline) {
+        setDispatchCheckState("expired");
+        return;
+      }
+      try {
+        const current = await request<CommitReport>(`/api/v1/schedule/commits/${reportId}`);
+        if (cancelled) return;
+        if (["completed", "error", "cancelled"].includes(current.dispatch_status)) {
+          setReport(current);
+          setDispatchCheckState("current");
+          return;
+        }
+        if (Date.now() >= dispatchDeadline) {
+          setDispatchCheckState("expired");
+          return;
+        }
+        setReport(current);
+        setDispatchCheckState("current");
+        timer = window.setTimeout(() => void poll(), 500);
+      } catch {
+        if (cancelled) return;
+        if (Date.now() < dispatchDeadline) {
+          setDispatchCheckState("retrying");
+          timer = window.setTimeout(() => void poll(), 1_000);
+        } else {
+          setDispatchCheckState("expired");
+        }
+      }
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [report?.report_id, dispatchDeadline]);
 
   async function prepare(event: FormEvent) {
     event.preventDefault();
@@ -804,6 +869,8 @@ function Schedule({ dashboard, channels, stationTimezone }: { dashboard: Dashboa
     setBusy(true);
     setError(null);
     setReport(null);
+    setDispatchDeadline(null);
+    setDispatchCheckState("current");
     try {
       const scheduleItem: ScheduleItem = {
         item_id: crypto.randomUUID(),
@@ -833,16 +900,11 @@ function Schedule({ dashboard, channels, stationTimezone }: { dashboard: Dashboa
     setError(null);
     try {
       const nextReport = await request<CommitReport>("/api/v1/schedule/commit", { method: "POST", body: JSON.stringify({ report_id: `report-${crypto.randomUUID()}`, plan_id: plan.plan_id, schedule_item_id: item.item_id, operator_notes: "Approved in Townlight Station operator console." }) });
+      const deadline = Date.now() + Math.max(30_000, item.starts_at_unix_ms - Date.now() + item.duration_ms + 10_000);
+      setDispatchCheckState("current");
+      setDispatchDeadline(deadline);
       setReport(nextReport);
       await loadSchedule(channelId);
-      const reportId = nextReport.report_id;
-      const deadline = Date.now() + Math.max(30_000, item.starts_at_unix_ms - Date.now() + item.duration_ms + 10_000);
-      const poll = async () => {
-        const current = await request<CommitReport>(`/api/v1/schedule/commits/${reportId}`);
-        setReport(current);
-        if (!["completed", "error", "cancelled"].includes(current.dispatch_status) && Date.now() < deadline) window.setTimeout(() => void poll(), 500);
-      };
-      void poll();
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Approval could not be committed.");
     } finally {
@@ -851,21 +913,36 @@ function Schedule({ dashboard, channels, stationTimezone }: { dashboard: Dashboa
   }
 
   const selectedChannel = channels.find((channel) => channel.channel_id === channelId);
-  const visibleSchedule = scheduleItems.slice(0, 24);
+  const now = Date.now();
+  const currentAndUpcoming: ScheduleItem[] = [];
+  const historical: ScheduleItem[] = [];
+  for (const scheduleItem of scheduleItems) {
+    if (scheduleItem.starts_at_unix_ms + scheduleItem.duration_ms >= now) currentAndUpcoming.push(scheduleItem);
+    else historical.push(scheduleItem);
+  }
+  currentAndUpcoming.sort((left, right) => left.starts_at_unix_ms - right.starts_at_unix_ms);
+  historical.sort((left, right) => right.starts_at_unix_ms - left.starts_at_unix_ms);
+  const orderedSchedule = [...currentAndUpcoming, ...historical];
+  const visibleSchedule = orderedSchedule.slice(0, scheduleLimit);
+
+  const invalidatePreview = () => {
+    setPlan(null);
+    setItem(null);
+  };
 
   return <>
     <header className="page-header"><div><p className="eyebrow">Commit to air</p><h1>Schedule a program</h1><p>Generate recurring Drafts, then review and commit exact items through the station write lock.</p></div></header>
     {!channels.length ? <section className="panel"><Empty title="Schedule prerequisites are missing" detail="Configure a channel before scheduling." /></section> : <>
-      <section className="panel schedule-channel-scope"><label>Schedule channel<select required value={channelId} onChange={(event) => setChannelId(event.target.value)}>{channels.map((channel) => <option key={channel.channel_id} value={channel.channel_id}>{channel.display_name}</option>)}</select><small>Recurring generation and the schedule list below are scoped to this output channel.</small></label></section>
+      <section className="panel schedule-channel-scope"><label>Schedule channel<select required disabled={busy} value={channelId} onChange={(event) => setChannelId(event.target.value)}>{channels.map((channel) => <option key={channel.channel_id} value={channel.channel_id}>{channel.display_name}</option>)}</select><small>Recurring generation and the schedule list below are scoped to this output channel.</small></label></section>
       <AgendaPanel channelId={channelId} />
       <ScheduleMaterializationCard channelId={channelId} channelName={selectedChannel?.display_name ?? channelId} channelEnabled={selectedChannel?.enabled ?? false} onApplied={refreshCurrentSchedule} />
       <section className="panel channel-schedule-list" aria-labelledby="channel-schedule-title">
         <div className="panel-head"><div><p className="eyebrow">Current channel authority</p><h2 id="channel-schedule-title">Schedule items</h2>{stationScheduleZoneIsValid(stationTimezone) ? <small className="muted">Times in station zone {stationTimezone}</small> : <small className="muted">Station zone invalid</small>}</div><div className="button-row"><span className="count">{scheduleItems.length}</span><button type="button" className="text-button" disabled={scheduleLoading} onClick={() => void loadSchedule(channelId)}>{scheduleLoading ? "Refreshing…" : "Refresh schedule"}</button></div></div>
         {scheduleError && <div className="error-box" role="alert">{scheduleError}</div>}
         {scheduleLoading && !scheduleItems.length ? <div className="schedule-list-state" role="status">Reading the channel schedule…</div> : !scheduleItems.length ? <div className="schedule-list-state"><strong>No schedule items</strong><span>Generated and manual Drafts for this channel will appear here.</span></div> : <div className="schedule-item-list">{visibleSchedule.map((scheduleItem) => <article key={scheduleItem.item_id}><div><strong>{scheduleItem.title}</strong><span>{formatStationScheduleTime(scheduleItem.starts_at_unix_ms, stationTimezone)} · {formatDuration(scheduleItem.duration_ms)}</span><code>{scheduleItem.item_id}</code></div><StatusPill status={scheduleItem.state} /></article>)}</div>}
-        {scheduleItems.length > visibleSchedule.length && <small className="muted">Showing the first {visibleSchedule.length} of {scheduleItems.length} items in UTC start order.</small>}
+        {orderedSchedule.length > visibleSchedule.length && <div className="button-row"><small className="muted">Showing {visibleSchedule.length} of {orderedSchedule.length} items (current/upcoming first).</small><button type="button" className="text-button" onClick={() => setScheduleLimit((limit) => limit + 24)}>Show more</button></div>}
       </section>
-      {!readyAssets.length ? <section className="panel"><Empty title="Manual draft prerequisites are missing" detail="Import and verify at least one air-ready asset to create a manual Draft. Recurring generation remains available above and records no-match outcomes when appropriate." /></section> : <section className="split-grid schedule-layout"><article className="panel sticky-form"><p className="eyebrow">Program details</p><h2>Create manual draft</h2><form onSubmit={prepare}><label>Air-ready asset<select required value={assetId} onChange={(event) => { setAssetId(event.target.value); setDurationOverride(null); }}>{readyAssets.map((asset) => <option key={asset.asset_id} value={asset.asset_id}>{asset.media_path.split(/[\\/]/).pop()} · {formatDuration(asset.duration_ms)}</option>)}</select></label><label>Program title<input required value={title} onChange={(event) => setTitle(event.target.value)} placeholder="City Council Meeting" /></label><label>Starts at <small>Station zone: {stationTimezone}</small><input required type="datetime-local" value={start} onChange={(event) => setStart(event.target.value)} /></label>{!stationScheduleZoneIsValid(stationTimezone) && <div className="error-box" role="alert">The station timezone is not a valid IANA zone. Set it before preparing a draft.</div>}<label>Air duration (seconds)<input required type="number" min="0.001" step="0.001" value={duration} onChange={(event) => setDurationOverride(event.target.value)} /></label>{error && <div className="error-box" role="alert">{error}</div>}<button className="primary wide" disabled={busy || !durationValid || !stationScheduleZoneIsValid(stationTimezone)}>{busy ? "Checking…" : "Prepare commit"}</button></form></article><article className="panel"><p className="eyebrow">Approval gate</p><h2>Commit preview</h2>{!plan || !item ? <Empty title="No draft prepared" detail="Enter the program details to run conflict, gap, duration, and media-readiness checks." action="Complete the form" onAction={() => document.querySelector<HTMLInputElement>(".schedule-layout input")?.focus()} /> : <div className="commit-preview"><div className={`gate-banner ${plan.dry_run_passed ? "pass" : "fail"}`}><span>{plan.dry_run_passed ? "✓" : "!"}</span><div><strong>{plan.dry_run_passed ? "Safe to commit" : "Commit blocked"}</strong><p>{plan.dry_run_passed ? "No conflicts or missing media were found." : "Resolve every blocker, then prepare again."}</p></div></div><dl><div><dt>Program</dt><dd>{item.title}</dd></div><div><dt>Starts</dt><dd>{formatStationScheduleTime(item.starts_at_unix_ms, stationTimezone)}</dd></div><div><dt>Duration</dt><dd>{formatDuration(item.duration_ms)}</dd></div><div><dt>Conflicts</dt><dd>{plan.conflicts.length}</dd></div><div><dt>Missing media</dt><dd>{plan.missing_media_detail ? 1 : 0}</dd></div></dl>{plan.missing_media_detail && <div className="error-box" role="alert">{plan.missing_media_detail}</div>}<button className="primary wide" disabled={!plan.dry_run_passed || busy || Boolean(report)} onClick={() => void approve()}>{report ? "Approval recorded" : "Approve & commit to air"}</button>{report && <div className="dispatch"><span className="live-dot" /><div><strong>Dispatch {report.dispatch_status.replaceAll("_", " ")}</strong><p>The channel worker advances this record only after durable acknowledgements.</p></div><StatusPill status={report.dispatch_status} /></div>}</div>}</article></section>}
+      {!readyAssets.length ? <section className="panel"><Empty title="Manual draft prerequisites are missing" detail="Import and verify at least one air-ready asset to create a manual Draft. Recurring generation remains available above and records no-match outcomes when appropriate." /></section> : <section className="split-grid schedule-layout"><article className="panel sticky-form"><p className="eyebrow">Program details</p><h2>Create manual draft</h2><form onSubmit={prepare}><label>Air-ready asset<select required disabled={busy} value={assetId} onChange={(event) => { setAssetId(event.target.value); setDurationOverride(null); invalidatePreview(); }}>{readyAssets.map((asset) => <option key={asset.asset_id} value={asset.asset_id}>{asset.media_path.split(/[\\/]/).pop()} · {formatDuration(asset.duration_ms)}</option>)}</select></label><label>Program title<input required disabled={busy} value={title} onChange={(event) => { setTitle(event.target.value); invalidatePreview(); }} placeholder="City Council Meeting" /></label><label>Starts at <small>Station zone: {stationTimezone}</small><input required disabled={busy} type="datetime-local" value={start} onChange={(event) => { setStart(event.target.value); invalidatePreview(); }} /></label>{!stationScheduleZoneIsValid(stationTimezone) && <div className="error-box" role="alert">The station timezone is not a valid IANA zone. Set it before preparing a draft.</div>}<label>Air duration (seconds)<input required disabled={busy} type="number" min="0.001" step="0.001" value={duration} onChange={(event) => { setDurationOverride(event.target.value); invalidatePreview(); }} /></label>{error && <div className="error-box" role="alert">{error}</div>}<button className="primary wide" disabled={busy || !durationValid || !stationScheduleZoneIsValid(stationTimezone)}>{busy ? "Checking…" : "Prepare commit"}</button></form></article><article className="panel"><p className="eyebrow">Approval gate</p><h2>Commit preview</h2>{!plan || !item ? <Empty title="No draft prepared" detail="Enter the program details to run conflict, gap, duration, and media-readiness checks." action="Complete the form" onAction={() => document.querySelector<HTMLInputElement>(".schedule-layout input")?.focus()} /> : <div className="commit-preview"><div className={`gate-banner ${plan.dry_run_passed ? "pass" : "fail"}`}><span>{plan.dry_run_passed ? "✓" : "!"}</span><div><strong>{plan.dry_run_passed ? "Safe to commit" : "Commit blocked"}</strong><p>{plan.dry_run_passed ? "No conflicts or missing media were found." : "Resolve every blocker, then prepare again."}</p></div></div><dl><div><dt>Program</dt><dd>{item.title}</dd></div><div><dt>Starts</dt><dd>{formatStationScheduleTime(item.starts_at_unix_ms, stationTimezone)}</dd></div><div><dt>Duration</dt><dd>{formatDuration(item.duration_ms)}</dd></div><div><dt>Conflicts</dt><dd>{plan.conflicts.length}</dd></div><div><dt>Missing media</dt><dd>{plan.missing_media_detail ? 1 : 0}</dd></div></dl>{plan.missing_media_detail && <div className="error-box" role="alert">{plan.missing_media_detail}</div>}<button className="primary wide" disabled={!plan.dry_run_passed || busy || Boolean(report)} onClick={() => void approve()}>{report ? "Approval recorded" : "Approve & commit to air"}</button></div>}{report && <div className="dispatch"><span className="live-dot" /><div><strong>Dispatch {report.dispatch_status.replaceAll("_", " ")}</strong><p>The channel worker advances this record only after durable acknowledgements.</p>{dispatchCheckState === "retrying" && <p className="muted" role="status">Status check is temporarily unavailable; retrying.</p>}{dispatchCheckState === "expired" && <p className="muted" role="status">Dispatch status could not be confirmed before status checks ended. The status shown is the last one received.</p>}</div><StatusPill status={report.dispatch_status} /></div>}</article></section>}
     </>}
   </>;
 }
@@ -875,20 +952,42 @@ function AlertRuleEditor({ rule, destinations, outputChannels, onRefresh }: { ru
   const [routeAll, setRouteAll] = useState(rule.channel_ids.length === 0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { setDraft(rule); setRouteAll(rule.channel_ids.length === 0); }, [rule]);
+  const dirtyRef = useRef(false);
+  const suppressSyncRef = useRef(false);
+  useEffect(() => {
+    if (dirtyRef.current || suppressSyncRef.current) return;
+    setDraft(rule);
+    setRouteAll(rule.channel_ids.length === 0);
+  }, [rule]);
+  function updateDraft(updater: (current: AlertRule) => AlertRule) {
+    dirtyRef.current = true;
+    setDraft(updater);
+  }
+  function updateRouteAll(next: boolean) {
+    dirtyRef.current = true;
+    setRouteAll(next);
+  }
   function toggleDestination(channelId: string) {
-    setDraft((current) => ({ ...current, channel_ids: current.channel_ids.includes(channelId) ? current.channel_ids.filter((id) => id !== channelId) : [...current.channel_ids, channelId] }));
+    updateDraft((current) => ({ ...current, channel_ids: current.channel_ids.includes(channelId) ? current.channel_ids.filter((id) => id !== channelId) : [...current.channel_ids, channelId] }));
   }
   async function save() {
     if (!routeAll && draft.channel_ids.length === 0) { setError("Select at least one destination or route to all enabled destinations."); return; }
     setBusy(true); setError(null);
     try {
-      await request<AlertRule>(`/api/v1/alert-rules/${rule.rule_id}`, { method: "PUT", body: JSON.stringify({ condition: draft.condition, enabled: draft.enabled, severity: draft.severity, channel_ids: routeAll ? [] : draft.channel_ids, dedupe_window_seconds: draft.dedupe_window_seconds, re_alert_after_seconds: draft.re_alert_after_seconds, scope_channel_id: draft.scope_channel_id, notify_on_resolve: draft.notify_on_resolve }) });
-      await onRefresh();
+      const saved = await request<AlertRule>(`/api/v1/alert-rules/${rule.rule_id}`, { method: "PUT", body: JSON.stringify({ condition: draft.condition, enabled: draft.enabled, severity: draft.severity, channel_ids: routeAll ? [] : draft.channel_ids, dedupe_window_seconds: draft.dedupe_window_seconds, re_alert_after_seconds: draft.re_alert_after_seconds, scope_channel_id: draft.scope_channel_id, notify_on_resolve: draft.notify_on_resolve }) });
+      suppressSyncRef.current = true;
+      dirtyRef.current = false;
+      setDraft(saved);
+      setRouteAll(saved.channel_ids.length === 0);
+      try {
+        await onRefresh();
+      } finally {
+        suppressSyncRef.current = false;
+      }
     } catch (problem) { setError(problem instanceof Error ? problem.message : "The alert rule could not be saved."); }
     finally { setBusy(false); }
   }
-  return <article className="rule-card"><div className="rule-title"><div><strong>{draft.condition.replaceAll("-", " ")}</strong><small>{draft.scope_channel_id ? `Scoped to ${outputChannels.find((channel) => channel.channel_id === draft.scope_channel_id)?.display_name ?? draft.scope_channel_id}` : "All output channels"}</small></div><label className="switch-label"><input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />Enabled</label></div><div className="rule-grid"><label>Severity<select value={draft.severity} onChange={(event) => setDraft({ ...draft, severity: event.target.value as AlertRule["severity"] })}><option value="critical">Critical</option><option value="warning">Warning</option><option value="info">Info</option></select></label><label>Re-alert after<select value={draft.re_alert_after_seconds} onChange={(event) => setDraft({ ...draft, re_alert_after_seconds: Number(event.target.value) })}><option value="0">Never</option><option value="1800">30 minutes</option><option value="3600">1 hour</option><option value="7200">2 hours</option><option value="21600">6 hours</option></select></label><label>Dedupe window (seconds)<input type="number" min="0" max="86400" value={draft.dedupe_window_seconds} onChange={(event) => setDraft({ ...draft, dedupe_window_seconds: Number(event.target.value) })} /></label><label>Output scope<select value={draft.scope_channel_id ?? ""} onChange={(event) => setDraft({ ...draft, scope_channel_id: event.target.value || null })}><option value="">All outputs</option>{outputChannels.map((channel) => <option key={channel.channel_id} value={channel.channel_id}>{channel.display_name}</option>)}</select></label></div><div className="rule-options"><label className="switch-label"><input type="checkbox" checked={draft.notify_on_resolve} onChange={(event) => setDraft({ ...draft, notify_on_resolve: event.target.checked })} />Notify when resolved</label><label className="switch-label"><input type="checkbox" checked={routeAll} onChange={(event) => setRouteAll(event.target.checked)} />All enabled destinations</label></div>{!routeAll && <div className="destination-checks">{destinations.map((destination) => <label key={destination.channel_id}><input type="checkbox" checked={draft.channel_ids.includes(destination.channel_id)} onChange={() => toggleDestination(destination.channel_id)} />{destination.label} <small>{destination.kind}</small></label>)}</div>}{error && <div className="error-box" role="alert">{error}</div>}<button className="secondary wide" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : "Save rule"}</button></article>;
+  return <article className="rule-card"><div className="rule-title"><div><strong>{draft.condition.replaceAll("-", " ")}</strong><small>{draft.scope_channel_id ? `Scoped to ${outputChannels.find((channel) => channel.channel_id === draft.scope_channel_id)?.display_name ?? draft.scope_channel_id}` : "All output channels"}</small></div><label className="switch-label"><input type="checkbox" checked={draft.enabled} disabled={busy} onChange={(event) => updateDraft((current) => ({ ...current, enabled: event.target.checked }))} />Enabled</label></div><div className="rule-grid"><label>Severity<select value={draft.severity} disabled={busy} onChange={(event) => updateDraft((current) => ({ ...current, severity: event.target.value as AlertRule["severity"] }))}><option value="critical">Critical</option><option value="warning">Warning</option><option value="info">Info</option></select></label><label>Re-alert after<select value={draft.re_alert_after_seconds} disabled={busy} onChange={(event) => updateDraft((current) => ({ ...current, re_alert_after_seconds: Number(event.target.value) }))}><option value="0">Never</option><option value="1800">30 minutes</option><option value="3600">1 hour</option><option value="7200">2 hours</option><option value="21600">6 hours</option></select></label><label>Dedupe window (seconds)<input type="number" min="0" max="86400" value={draft.dedupe_window_seconds} disabled={busy} onChange={(event) => updateDraft((current) => ({ ...current, dedupe_window_seconds: Number(event.target.value) }))} /></label><label>Output scope<select value={draft.scope_channel_id ?? ""} disabled={busy} onChange={(event) => updateDraft((current) => ({ ...current, scope_channel_id: event.target.value || null }))}><option value="">All outputs</option>{outputChannels.map((channel) => <option key={channel.channel_id} value={channel.channel_id}>{channel.display_name}</option>)}</select></label></div><div className="rule-options"><label className="switch-label"><input type="checkbox" checked={draft.notify_on_resolve} disabled={busy} onChange={(event) => updateDraft((current) => ({ ...current, notify_on_resolve: event.target.checked }))} />Notify when resolved</label><label className="switch-label"><input type="checkbox" checked={routeAll} disabled={busy} onChange={(event) => updateRouteAll(event.target.checked)} />All enabled destinations</label></div>{!routeAll && <div className="destination-checks">{destinations.map((destination) => <label key={destination.channel_id}><input type="checkbox" checked={draft.channel_ids.includes(destination.channel_id)} disabled={busy} onChange={() => toggleDestination(destination.channel_id)} />{destination.label} <small>{destination.kind}</small></label>)}</div>}{error && <div className="error-box" role="alert">{error}</div>}<button className="secondary wide" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : "Save rule"}</button></article>;
 }
 
 function SelfTestScheduleEditor({ schedule, latest, busy, onRun, onRefresh }: { schedule: SelfTestSchedule; latest: SystemSelfTest | undefined; busy: boolean; onRun: (kind: SelfTestKind) => Promise<void>; onRefresh: () => Promise<void> }) {
@@ -1312,6 +1411,7 @@ function Live({ channels }: { channels: Channel[] }) {
 
 function App() {
   const workspaceRef = useRef<HTMLElement>(null);
+  const stationReadGeneration = useRef(0);
   const [station, setStation] = useState<StationDocument | null | undefined>(undefined);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -1327,6 +1427,7 @@ function App() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [view, setView] = useState<View>(initialView);
   const [error, setError] = useState<string | null>(null);
+  const [stationReadError, setStationReadError] = useState<string | null>(null);
   const refreshReadiness = useMemo(() => createRuntimeReadinessRefresher<RuntimeSafeToAirStatus>(
     () => request<RuntimeSafeToAirStatus>("/api/v1/runtime-safe-to-air"),
     setRuntime,
@@ -1339,7 +1440,28 @@ function App() {
     } catch (problem) { setError(problem instanceof Error ? problem.message : "Station state could not be refreshed."); }
     finally { await readiness; }
   }, [refreshReadiness]);
-  useEffect(() => { void request<StationDocument>("/api/v1/station").then((value) => { setStation(value); void refresh(); }).catch((problem) => { if (problem instanceof ApiError && problem.status === 404) setStation(null); else { setStation(null); setError(problem instanceof Error ? problem.message : "Station profile could not be read."); } }); }, [refresh]);
+  const readStation = useCallback(async () => {
+    const generation = ++stationReadGeneration.current;
+    setStationReadError(null);
+    try {
+      const value = await request<StationDocument>("/api/v1/station");
+      if (stationReadGeneration.current !== generation) return;
+      setStation(value);
+      void refresh();
+    } catch (problem) {
+      if (stationReadGeneration.current !== generation) return;
+      if (problem instanceof ApiError && problem.status === 404) {
+        setStation(null);
+      } else {
+        setStation(undefined);
+        setStationReadError(problem instanceof Error ? problem.message : "Station profile could not be read.");
+      }
+    }
+  }, [refresh]);
+  useEffect(() => {
+    void readStation();
+    return () => { stationReadGeneration.current += 1; };
+  }, [readStation]);
   useEffect(() => { if (!station) return; const timer = window.setInterval(() => void refresh(), 5_000); return () => window.clearInterval(timer); }, [refresh, station]);
   const nav = useMemo(() => ([{ id: "overview" as CoreView, label: "Overview" }, { id: "media" as CoreView, label: "Media" }, { id: "channels" as CoreView, label: "Channels" }, { id: "schedule" as CoreView, label: "Schedule" }, { id: "live" as CoreView, label: "Live" }, { id: "automation" as CoreView, label: "Automation" }, { id: "publishing" as CoreView, label: "Publishing" }, { id: "metadata" as CoreView, label: "Metadata" }, { id: "recordings" as CoreView, label: "Recordings" }, { id: "reporting" as CoreView, label: "Reports" }, { id: "health" as CoreView, label: "Health" }, { id: "commissioning" as CoreView, label: "Commission" }]), []);
   const cgNav = useMemo(() => CG_ROUTES.map((item) => ({ id: item.id as View, label: item.shortLabel })), []);
@@ -1354,7 +1476,10 @@ function App() {
     const frame = window.requestAnimationFrame(() => workspaceRef.current?.focus());
     return () => window.cancelAnimationFrame(frame);
   }, [station, view]);
-  if (station === undefined) return <div className="boot"><div className="mark">TL</div><div className="boot-line"><i /></div><p>Connecting to Townlight Station…</p></div>;
+  if (station === undefined) {
+    if (stationReadError) return <div className="boot" role="alert"><div className="mark">TL</div><h1>Station startup failed</h1><p>{stationReadError}</p><button onClick={() => void readStation()}>Retry</button></div>;
+    return <div className="boot"><div className="mark">TL</div><div className="boot-line"><i /></div><p>Connecting to Townlight Station…</p></div>;
+  }
   if (!station) return <SetupWizard onComplete={(value) => { setStation(value); navigate("commissioning"); void refresh(); }} />;
   return <div className="app-shell"><a className="skip-link" href="#station-workspace">Skip to station controls</a><aside className="sidebar"><div className="brand-lockup"><div className="mark small" aria-hidden="true">TL</div><div><strong>Townlight</strong><span>Station</span></div></div><nav aria-label="Station screens">{nav.map((item) => <button key={item.id} aria-current={view === item.id ? "page" : undefined} className={view === item.id ? "selected" : ""} onClick={() => navigate(item.id)}><Icon name={item.id} /><span>{item.label}</span>{item.id === "media" && Boolean(dashboard?.failed_ingest_count) && <b>{dashboard?.failed_ingest_count}</b>}{item.id === "health" && Boolean(runtime?.active_critical_alerts || runtime?.active_warning_alerts) && <b>{(runtime?.active_critical_alerts ?? 0) + (runtime?.active_warning_alerts ?? 0)}</b>}</button>)}<p className="nav-section-label">CG authoring</p>{cgNav.map((item) => <button key={item.id} aria-current={view === item.id ? "page" : undefined} className={`cg-nav-item ${view === item.id ? "selected" : ""}`} onClick={() => navigate(item.id)}><span className="cg-nav-mark" aria-hidden="true">CG</span><span>{item.label}</span></button>)}</nav><div className="station-card"><span className={`live-dot runtime-${runtime?.color ?? "yellow"}`} aria-hidden="true" /><div><strong>{station.display_name}</strong><small>{runtime?.label ?? READINESS_UNAVAILABLE_LABEL}</small></div></div></aside><main id="station-workspace" className="workspace" ref={workspaceRef} tabIndex={-1}>{error && <div className="global-error" role="alert">{error}<button onClick={() => void refresh()}>Retry</button></div>}{view === "overview" && <Overview station={station} dashboard={dashboard} channels={channels} runtime={runtime} onNavigate={navigate} />}{view === "media" && <Media dashboard={dashboard} onRefresh={refresh} />}{view === "channels" && <Channels channels={channels} outputProfiles={outputProfiles} onRefresh={refresh} />}{view === "schedule" && <Schedule dashboard={dashboard} channels={channels} stationTimezone={station.timezone} key={station.timezone} />}{view === "live" && <Live channels={channels} />}{view === "automation" && <AutomationPanel />}{view === "publishing" && <PublishingPanel />}{view === "metadata" && <MetadataPanel assets={dashboard?.by_asset ?? []} />}{view === "recordings" && <ScheduledRecordingsPanel channels={channels.map((channel) => ({ channel_id: channel.channel_id, display_name: channel.display_name }))} />}{view === "reporting" && <ReportingPanel channels={channels.map((channel) => ({ channel_id: channel.channel_id, display_name: channel.display_name }))} />}{view === "health" && <Health runtime={runtime} resources={resources} selfTests={selfTests} selfTestSchedules={selfTestSchedules} updateStatus={updateStatus} alerts={alerts} alertChannels={alertChannels} deliveries={deliveries} rules={rules} outputChannels={channels} onRefresh={refresh} />}{view === "commissioning" && <Commissioning onNavigate={navigate} />}{view.startsWith("cg-") && <CgOperator channelId={channels[0]?.channel_id} channels={channels.map((channel) => ({ channel_id: channel.channel_id, display_name: channel.display_name }))} route={view as CgRoute} onNavigate={(route) => navigate(route)} />}</main><nav className="mobile-nav" aria-label="Station screens">{[...nav, { id: "cg-moderation" as View, label: "CG" }].map((item) => { const selected = view === item.id || (item.id === "cg-moderation" && view.startsWith("cg-")); return <button key={item.id} aria-label={item.label} aria-current={selected ? "page" : undefined} className={selected ? "selected" : ""} onClick={() => navigate(item.id)}>{"id" in item && item.id.startsWith("cg-") ? <span className="cg-nav-mark" aria-hidden="true">CG</span> : <Icon name={item.id as CoreView} />}<span>{item.label}</span></button>; })}</nav></div>;
 }
