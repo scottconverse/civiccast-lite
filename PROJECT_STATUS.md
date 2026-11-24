@@ -5,7 +5,9 @@
 
 
 **Status date:** 2026-08-29  
-**Release verdict:** not a beta release; not a complete PEG/Cablecast-equivalent product  
+
+**Historical release verdict:** The inherited Townlight assessment found a station kernel with incomplete PEG feature coverage and an unmet Townlight-era beta gate. The current CivicCast Lite prerelease is [v0.1.0.14](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.14).
+
 **Repository truth:** `main`, `README.md`, `CAPABILITIES.md`, and the evidence records under `docs/proof/`
 
 ## Bottom line
@@ -21,14 +23,13 @@ surface required for functional parity with an established PEG automation produc
 ledger marks only S4, S8, and S9 `implemented`; 22 rows are `partial`, and S18 is a distributed
 comparison row.
 
-No current-source installer has passed the complete beta gate defined below. A reachable service,
-green unit tests, source-level proof, an older installed candidate, or a component receipt must not
-be represented as that result.
+At the time of the assessment, no installer had passed the gate described below. The recorded
+service checks, unit tests, and component receipts cover individual parts of that historical gate.
 
-## Current beta gate
+## Retired Townlight beta gate
 
-One immutable source commit and its exact installer must complete all of the following on a fresh
-Windows machine:
+The historical assessment required one exact installer from an immutable source commit to complete
+the following checks on a fresh Windows machine.
 
 1. install through the ordinary double-click operator path;
 2. start both Windows services and verify installed payload identity;
@@ -40,8 +41,10 @@ Windows machine:
 8. run continuously for four to eight hours with observed output, health, resource, and failure
    coverage.
 
-This is a narrow station-kernel beta gate. Passing it would not close the remaining S1-S26 product
-scope or prove production-headend acceptance.
+That was a narrow station-kernel beta gate. Passing it would not have closed the remaining S1-S26
+product scope or proved production-headend acceptance. For current release and scope, see the
+[v0.1.0.14 release](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.14) and
+[README](README.md).
 
 ## What is materially implemented
 

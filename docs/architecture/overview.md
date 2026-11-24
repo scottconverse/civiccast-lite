@@ -127,6 +127,6 @@ flowchart TD
 
 ## Testing and limits
 
-Evaluation has covered tiers of 3, 6, and 9 channels across builds. The v0.1.0.13 Windows installer passed a short three-channel check on Halo. See the [README](../../README.md) for results and open checks. Measured capacity depends on the media, outputs, host, and encoder.
+The v0.1.0.14 packages passed clean installation, service startup, and operator console checks on Windows, macOS, and Ubuntu. Earlier evaluation covered tiers of 3, 6, and 9 channels across builds, including a short three-channel check on Halo with the v0.1.0.13 Windows installer. Measured capacity depends on the media, outputs, host, and encoder. See the [README](../../README.md) for results and open checks.
 
 See the [architecture reference at the v0.1.0.12 commit](https://github.com/scottconverse/civiccast-lite/blob/ebffd381caa0ba9f7d97ff2e750189b39e8346e3/docs/architecture/overview.md) for inherited subsystem detail and the original design record.

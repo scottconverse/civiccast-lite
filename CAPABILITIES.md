@@ -5,17 +5,18 @@
 
 S22 now also includes bounded public discovery: unauthenticated `GET /api/v1/public/catalog` derives redacted pages in one read snapshot from Published catalog, Ready media, exact metadata history rows, historical value schemas, and current public-visibility policy. It exposes an opaque public ID, title, publication time, duration, and only currently `public && faceted` typed equality values. One boot-time identity audit plus immutable mapping triggers, indexed 500-candidate windows, and boot-scoped HMAC-authenticated filter/generation cursors bound anonymous work across the full catalog. This is a read-time projection—not a persistent/full-text index, public-site delivery, playback/OTT publication, installed-machine evidence, or field proof.
 
-This ledger is the release-scope truth for the complete Station product. It separates product
+This inherited ledger describes the broader Townlight Station product scope. It separates product
 implementation from proof: source code, tests, one-machine installed evidence, clean-machine
 acceptance, headend acceptance, and field acceptance are different states. A capability is not
 complete merely because an adjacent primitive exists.
 
-The current beta bar is one exact candidate installed from a double-click installer on a fresh
-Windows machine, followed by operator bootstrap and configuration, real media ingest and scheduled
-on-air operation, caption verification, service restart and recovery, and an uninterrupted
-four-to-eight-hour soak. This narrow station-kernel gate is not functional parity with the complete
-S1-S26 product scope. The ledger must be updated in the same commit that materially changes a
-capability state.
+The inherited Townlight-era beta bar was one exact candidate installed from a double-click installer
+on a fresh Windows machine, followed by operator bootstrap and configuration, real media ingest and
+scheduled on-air operation, caption verification, service restart and recovery, and an uninterrupted
+four-to-eight-hour soak. It covered the station kernel within the broader S1–S26 product scope.
+For CivicCast Lite's current release and verification results, see the
+[v0.1.0.14 prerelease](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.14) and
+[README](README.md).
 
 Status vocabulary:
 

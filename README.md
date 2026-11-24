@@ -24,6 +24,10 @@ The Rust station service owns scheduling, operator authentication, and SQLite st
 
 ## What has been verified
 
+**v0.1.0.14 (commit `6d03fd4`)** passed clean installation, service startup, and operator console checks on Windows x64, macOS arm64, and Ubuntu 26.04 amd64. The Windows check used the final signed installer. [Hosted build and Unix checks](https://github.com/scottconverse/civiccast-lite/actions/runs/45429657255) · [Signed Windows check](https://github.com/scottconverse/civiccast/actions/runs/45434131285)
+
+Earlier playout and capacity checks:
+
 - **macOS** passed short cable and portal checks at 3, 6, and 9 channels. The cable receiver also recovered picture and sound after a channel-worker restart.
 - **Windows** passed a native clean install and a short three-channel cable and portal check with real recordings on Halo. An earlier nine-channel R7 test found an intermittent picture freeze.
 - **Ubuntu** passed a local RTMP receiver recovery test. Physical R9 capacity and playback in YouTube's viewer remain unverified.
