@@ -1,5 +1,10 @@
 # CivicCast Lite changelog
 
+## Unreleased CivicCast Lite changes
+
+- Manual schedule times and previews use the station profile’s time zone. The console asks for a different time if the entered wall time is skipped or repeated during a daylight-saving transition.
+- The console updates on-air readiness independently of alerts and other panels. If readiness cannot be fetched, the console shows it as unavailable.
+
 ## [v0.1.0.13](https://github.com/scottconverse/civiccast-lite/releases/tag/v0.1.0.13)
 
 - Published packages for Windows x64, macOS on Apple silicon, and Ubuntu 26 amd64.
